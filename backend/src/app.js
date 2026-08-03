@@ -10,8 +10,15 @@ app.use(cors());
 app.use(express.json());
 app.use(requestLogger);
 
-app.get("/health", (req, res) => {
-  res.json({ status: "ok" });
+const { pool } = require("./config/database");
+
+app.get("/health", async (req, res) => {
+  try {
+    await pool.query("SELECT 1");
+    res.json({ status: "ok", database: "connected" });
+  } catch (err) {
+    res.status(500).json({ status: "error", database: "disconnected", message: err.message });
+  }
 });
 
 app.use("/api", routes);
