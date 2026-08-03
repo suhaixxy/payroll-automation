@@ -1,0 +1,34 @@
+require("dotenv").config();
+const fs = require("fs");
+const path = require("path");
+const { Pool } = require("pg");
+
+const pool = new Pool({
+  connectionString: process.env.DATABASE_URL,
+});
+
+async function runSeeds() {
+  const seedsDir = path.join(__dirname, "seeds");
+  const files = fs
+    .readdirSync(seedsDir)
+    .filter((file) => file.endsWith(".sql"))
+    .sort();
+
+  console.log(`Found ${files.length} seed file(s):`, files);
+
+  for (const file of files) {
+    const filePath = path.join(seedsDir, file);
+    const sql = fs.readFileSync(filePath, "utf8");
+    console.log(`Running seed: ${file}`);
+    await pool.query(sql);
+    console.log(`Completed: ${file}`);
+  }
+
+  console.log("All seeds completed successfully.");
+  await pool.end();
+}
+
+runSeeds().catch((err) => {
+  console.error("Seeding failed:", err);
+  process.exit(1);
+});
