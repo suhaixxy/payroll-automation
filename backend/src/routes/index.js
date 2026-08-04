@@ -8,7 +8,10 @@ router.use("/approvals", require("./approvals"));
 router.use("/payments", require("./payments"));
 router.use("/staff", require("./staff"));
 router.use("/pay-periods", require("./payPeriods"));
-// UC-005 authentication
+
+// UC-005
 router.use("/auth", require("./auth"));
+router.use("/audit-logs", require("./auditLogs"));
+router.use("/payslips", require("./payslips"));
 
 module.exports = router;
