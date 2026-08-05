@@ -1,34 +1,26 @@
-require("dotenv").config();
-const fs = require("fs");
-const path = require("path");
-const { Pool } = require("pg");
+// Applies the .sql files in db/migrations through the SAME tracked runner
+// the server uses at startup (initializeDatabase + schema_migrations), so
+// `npm run db:migrate` is idempotent — a second run is a no-op instead of
+// crashing on "table already exists".
 
-const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-});
+require("dotenv").config({ path: require("path").resolve(__dirname, "../../../.env") });
 
-async function runMigrations() {
-  const migrationsDir = path.join(__dirname, "migrations");
-  const files = fs
-    .readdirSync(migrationsDir)
-    .filter((file) => file.endsWith(".sql"))
-    .sort(); // ensures 001_, 002_, 003_ run in order
+const { DEFAULT_URL } = require("./waitForDb");
+// config/database.js reads DATABASE_URL at require time, so default it first.
+process.env.DATABASE_URL = process.env.DATABASE_URL || DEFAULT_URL;
 
-  console.log(`Found ${files.length} migration file(s):`, files);
+const { initializeDatabase } = require("./initializeDatabase");
+const { pool } = require("../config/database");
 
-  for (const file of files) {
-    const filePath = path.join(migrationsDir, file);
-    const sql = fs.readFileSync(filePath, "utf8");
-    console.log(`Running migration: ${file}`);
-    await pool.query(sql);
-    console.log(`Completed: ${file}`);
-  }
-
-  console.log("All migrations completed successfully.");
-  await pool.end();
-}
-
-runMigrations().catch((err) => {
-  console.error("Migration failed:", err);
-  process.exit(1);
-});
+initializeDatabase()
+  .then(async () => {
+    console.log("All migrations applied.");
+    await pool.end();
+  })
+  .catch((err) => {
+    console.error(`Migration failed: ${err.message}`);
+    if (err.code === "ECONNREFUSED" || err.code === "ETIMEDOUT") {
+      console.error("Cannot reach PostgreSQL. Is Docker Desktop running? Try: npm run db:up");
+    }
+    process.exit(1);
+  });

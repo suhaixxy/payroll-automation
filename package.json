@@ -1,0 +1,16 @@
+{
+  "name": "payroll-automation",
+  "private": true,
+  "description": "Team scripts for the shared Docker PostgreSQL database (see docker-compose.yml). Run these from the repo root.",
+  "scripts": {
+    "db:up": "docker compose up -d db",
+    "db:down": "docker compose down",
+    "db:nuke": "docker compose down -v",
+    "db:logs": "docker compose logs -f db",
+    "db:psql": "docker compose exec db psql -U postgres -d payroll_automation",
+    "db:wait": "node backend/scripts/wait-for-db.js",
+    "db:migrate": "node backend/src/db/migrate.js",
+    "db:seed": "node backend/src/db/seed.js",
+    "db:reset": "npm run db:nuke && npm run db:up && npm run db:wait && npm run db:migrate && npm run db:seed"
+  }
+}
