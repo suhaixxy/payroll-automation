@@ -9,6 +9,8 @@ import {
 } from '../api/client';
 import PayrollLineTable, { formatCents } from '../components/PayrollLineTable';
 import LoginPanel from '../components/LoginPanel';
+// Shared status contract (UC-003 guide §5.1) — same module the backend uses.
+import { PAYROLL_STATUS } from '../../../shared/payrollStatus.mjs';
 
 // UC-003 page: accounting staff pick a validated pay period and run the
 // payroll calculation on its frozen hour snapshot. Shows derived period
@@ -66,7 +68,8 @@ function PayrollCalcPage() {
     if (keepSelectionId) return; // just refreshing statuses after a run
 
     // Default to the first period that's actually ready to calculate.
-    const defaultPeriod = periods.find((period) => period.status === 'validated') || periods[0];
+    const defaultPeriod =
+      periods.find((period) => period.status === PAYROLL_STATUS.VALIDATED) || periods[0];
     if (defaultPeriod) {
       setSelectedPayPeriodId(defaultPeriod.id);
       loadPayroll(defaultPeriod.id);
@@ -182,7 +185,7 @@ function PayrollCalcPage() {
           {loading && <span className="spinner" />}
           {loading ? 'Calculating…' : 'Calculate Payroll'}
         </button>
-        {selectedPeriod && selectedPeriod.status !== 'validated' && (
+        {selectedPeriod && selectedPeriod.status !== PAYROLL_STATUS.VALIDATED && (
           <span className="muted button-row-caption">
             Only a period in <strong>validated</strong> status can be calculated — this one is{' '}
             {selectedPeriod.status.replace(/_/g, ' ')}.

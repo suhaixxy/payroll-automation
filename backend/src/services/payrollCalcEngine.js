@@ -27,6 +27,8 @@ const {
 const statutoryEngine = require('./statutoryEngine');
 const incentiveEngine = require('./incentiveEngine');
 const auditService = require('./auditService');
+// Shared status contract (guide §5.1) — never hardcode status strings.
+const { PAYROLL_STATUS } = require('../../../shared/payrollStatus.mjs');
 
 // Warning flow 5a: if the period's derived gross total differs from the
 // previous period's by more than this fraction, the run still completes but
@@ -223,7 +225,7 @@ async function calculatePayroll(payPeriodId, actor) {
   // that already finished calculating sits at pending_approval, so an
   // accidental second POST lands here and nothing is written — recalculating
   // is only possible after UC-004 rejects the period back to validated.
-  if (period.status !== 'validated') {
+  if (period.status !== PAYROLL_STATUS.VALIDATED) {
     return { error: 'NOT_VALIDATED', currentStatus: period.status };
   }
 
@@ -320,8 +322,11 @@ async function calculatePayroll(payPeriodId, actor) {
 
     // Handoff to UC-004: the period now waits for manager review.
     await sequelize.query(
-      `UPDATE pay_period SET status = 'pending_approval', updated_at = now() WHERE id = :payPeriodId`,
-      { replacements: { payPeriodId }, transaction }
+      `UPDATE pay_period SET status = :status, updated_at = now() WHERE id = :payPeriodId`,
+      {
+        replacements: { payPeriodId, status: PAYROLL_STATUS.PENDING_APPROVAL },
+        transaction,
+      }
     );
 
     return lines;
@@ -374,7 +379,7 @@ async function calculatePayroll(payPeriodId, actor) {
   return {
     data: {
       payPeriodId,
-      status: 'pending_approval',
+      status: PAYROLL_STATUS.PENDING_APPROVAL,
       totals: {
         grossCents: totals.grossCents,
         deductionsCents: totals.deductionsCents,
