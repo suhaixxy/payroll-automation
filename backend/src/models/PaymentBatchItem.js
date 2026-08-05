@@ -1,0 +1,17 @@
+module.exports = (sequelize, DataTypes) => sequelize.define("PaymentBatchItem", {
+    id: { type: DataTypes.UUID, defaultValue: DataTypes.UUIDV4, primaryKey: true },
+    payment_batch_id: { type: DataTypes.UUID, allowNull: false },
+    payroll_line_id: { type: DataTypes.UUID, allowNull: false },
+    staff_id: { type: DataTypes.UUID, allowNull: false },
+    employee_reference: { type: DataTypes.STRING(100), allowNull: false },
+    employee_name: { type: DataTypes.STRING(150), allowNull: false },
+    bank_code: { type: DataTypes.STRING(20), allowNull: false },
+    bank_account_no: { type: DataTypes.STRING(100), allowNull: false },
+    gross_pay: { type: DataTypes.DECIMAL(12,2), allowNull: false },
+    incentive_pay: { type: DataTypes.DECIMAL(12,2), allowNull: false },
+    cpf_amount: { type: DataTypes.DECIMAL(12,2), allowNull: false },
+    sdl_amount: { type: DataTypes.DECIMAL(12,2), allowNull: false },
+    other_deduction: { type: DataTypes.DECIMAL(12,2), allowNull: false, defaultValue: 0 },
+    net_pay: { type: DataTypes.DECIMAL(12,2), allowNull: false },
+    payment_reference: { type: DataTypes.STRING(100), allowNull: false },
+}, { tableName: "payment_batch_item", underscored: true, timestamps: true });
