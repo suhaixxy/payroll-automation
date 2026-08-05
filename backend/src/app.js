@@ -6,12 +6,14 @@ const cors = require("cors");
 const routes = require("./routes/index");
 const requestLogger = require("./middleware/requestLogger");
 const errorHandler = require("./middleware/errorHandler");
+const apiResponse = require("./middleware/apiResponse");
 
 const app = express();
 
 app.use(cors());
 app.use(express.json());
 app.use(requestLogger);
+app.use(apiResponse);
 
 // Friendly landing response so opening http://localhost:5000 in a browser
 // doesn't show "Cannot GET /" — the real endpoints live under /api.
