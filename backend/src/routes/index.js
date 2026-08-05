@@ -13,7 +13,6 @@ router.use("/payments", require("./payments"));
 router.use("/staff", require("./staff"));
 router.use("/pay-periods", require("./payPeriods"));
 
-router.use('/payroll', require("./payrollRoutes")); // UC-003
-router.use('/user', require("./userRoutes")); // auth
+router.use('/user', require("./user")); // auth
 
 module.exports = router;
