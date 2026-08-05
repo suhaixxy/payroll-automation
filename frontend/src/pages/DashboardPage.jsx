@@ -5,8 +5,9 @@ import PayrollCalcPage from './PayrollCalcPage.jsx';
 
 // Placeholder for any use case whose page hasn't been built yet. Once that
 // use case is ready, swap its entry in TABS below for the real component —
-// nothing else in this file needs to change.
-function DashboardPage() {
+// nothing else in this file needs to change. Doubles as a backend
+// connection test so a broken API is visible immediately.
+function ComingSoon({ label }) {
   const [health, setHealth] = useState(null);
   const [error, setError] = useState(null);
 
@@ -18,8 +19,7 @@ function DashboardPage() {
 
   return (
     <div>
-      <h1>Dashboard — coming soon</h1>
-      {/* TEMP: connection test, remove once real dashboard is built */}
+      <h1>{label} — coming soon</h1>
       <p>Backend connection test:</p>
       {error && <p style={{ color: "red" }}>Error: {error}</p>}
       {health && <pre>{JSON.stringify(health, null, 2)}</pre>}
