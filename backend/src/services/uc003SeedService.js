@@ -146,12 +146,15 @@ async function seedDemoValidatedPeriod(idByRef) {
     const staffId = idByRef.get(staffShifts.externalRef);
     if (!staffId) continue;
     for (const shift of staffShifts.shifts) {
+      // The old repo's timesheet had shift_date/match_method columns; this
+      // repo's timesheet (001) does not, and the engine only SUMs rows per
+      // staff, so one row per shift without a date is equivalent.
       await pool.query(
         `INSERT INTO timesheet
-           (pay_period_id, staff_id, shift_date, total_hours, ot_hours, ph_hours,
-            is_frozen, match_status, match_method)
-         VALUES ($1, $2, $3::date + $4::int, $5, $6, $7, true, 'matched', 'id')`,
-        [period.id, staffId, period.startDate, shift.d, shift.total, shift.ot || 0, shift.ph || 0]
+           (pay_period_id, staff_id, total_hours, ot_hours, ph_hours,
+            is_frozen, match_status)
+         VALUES ($1, $2, $3, $4, $5, true, 'matched')`,
+        [period.id, staffId, shift.total, shift.ot || 0, shift.ph || 0]
       );
     }
   }
