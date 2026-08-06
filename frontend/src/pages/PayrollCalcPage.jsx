@@ -13,6 +13,7 @@ import {
 import PayrollLineTable, { formatMoney } from '../components/PayrollLineTable';
 import AdjustmentsPanel from '../components/AdjustmentsPanel';
 import PerformanceInputsPanel from '../components/PerformanceInputsPanel';
+import RateSetsPanel from '../components/RateSetsPanel';
 import LoginPanel from '../components/LoginPanel';
 // Shared status contract (UC-003 guide §5.1) — same file the backend uses.
 import payrollStatus from '../../../shared/payrollStatus.json';
@@ -404,6 +405,15 @@ function PayrollCalcPage() {
         >
           Performance Inputs
         </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={activeTab === 'rates'}
+          className={`tab${activeTab === 'rates' ? ' tab-active' : ''}`}
+          onClick={() => setActiveTab('rates')}
+        >
+          Rate Sets
+        </button>
       </div>
 
       {activeTab === 'lines' && (
@@ -441,6 +451,8 @@ function PayrollCalcPage() {
           onSaved={handleResolvedSaved}
         />
       )}
+
+      {activeTab === 'rates' && <RateSetsPanel />}
     </div>
   );
 }

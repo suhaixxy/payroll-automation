@@ -150,4 +150,14 @@ export function deletePerformanceInput(id) {
   return authedFetch(`/api/uc003/performance-inputs/${encodeURIComponent(id)}`, { method: 'DELETE' });
 }
 
+// Statutory rate sets — read-only in the UI; a new version supersedes the
+// old one via POST (manager, no UI yet per the guide).
+export function fetchRateSets() {
+  return authedFetch('/api/uc003/rate-sets');
+}
+
+export function fetchRateSet(id) {
+  return authedFetch(`/api/uc003/rate-sets/${encodeURIComponent(id)}`);
+}
+
 export { apiGet, apiPost };
