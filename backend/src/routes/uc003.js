@@ -7,6 +7,7 @@
 const express = require('express');
 const uc003Controller = require('../controllers/uc003Controller');
 const adjustmentController = require('../controllers/adjustmentController');
+const performanceInputController = require('../controllers/performanceInputController');
 const { requireAuth, requireRole } = require('../middleware/auth');
 
 const router = express.Router();
@@ -47,5 +48,28 @@ router.get('/adjustments/:id', requireAuth, adjustmentController.detail);
 router.post('/adjustments', requireAuth, requireRole('manager'), adjustmentController.create);
 router.patch('/adjustments/:id', requireAuth, requireRole('manager'), adjustmentController.patch);
 router.delete('/adjustments/:id', requireAuth, requireRole('manager'), adjustmentController.remove);
+
+// Performance inputs — full CRUD (§6). Reads: any authenticated user.
+// Create / update / delete: manager ONLY; soft delete; 409 once approved/paid.
+router.get('/performance-inputs', requireAuth, performanceInputController.list);
+router.get('/performance-inputs/:id', requireAuth, performanceInputController.detail);
+router.post(
+  '/performance-inputs',
+  requireAuth,
+  requireRole('manager'),
+  performanceInputController.create
+);
+router.patch(
+  '/performance-inputs/:id',
+  requireAuth,
+  requireRole('manager'),
+  performanceInputController.patch
+);
+router.delete(
+  '/performance-inputs/:id',
+  requireAuth,
+  requireRole('manager'),
+  performanceInputController.remove
+);
 
 module.exports = router;
