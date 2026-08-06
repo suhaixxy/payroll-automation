@@ -9,7 +9,7 @@ VALUES
   ('S004', 'Suhaila Ali', 'part_time', 'active'),
   ('S005', 'Kok En Qi', 'part_time', 'active'),
   ('S006', 'Wei Ming Lim', 'part_time', 'active'),
-  ('S007', 'Farrah Yusof', 'part_time', 'active')
+  ('S007', 'Farah Yusof', 'part_time', 'active')
 ON CONFLICT (external_ref) DO UPDATE
 SET full_name = EXCLUDED.full_name,
     status = EXCLUDED.status,

@@ -45,15 +45,15 @@ describe("calculateHours", () => {
 describe("runRosterSync", () => {
   test("matches a staff member by staff ID before checking their name", async () => {
     configureDatabase({
-      staffById: { S001: { id: "staff-1", staffId: "S001", fullName: "Andrea Chua", status: "active" } },
-      summaryRows: [{ staff_ext_ref: "S001", full_name: "Andrea Chua", total_hours: 9, match_status: "matched", match_method: "id", shift_date: "2026-08-01", clock_in: "08:00", clock_out: "17:00", updated_at: new Date() }],
+      staffById: { S007: { id: "staff-7", staffId: "S007", fullName: "Farah Yusof", status: "active" } },
+      summaryRows: [{ staff_ext_ref: "S007", full_name: "Farah Yusof", total_hours: 9, match_status: "matched", match_method: "id", shift_date: "2026-08-01", clock_in: "08:00", clock_out: "17:00", updated_at: new Date() }],
     });
-    fetchRosterRows.mockResolvedValue([{ "Staff ID": "S001", "Staff Name": "Different Name", Date: "2026-08-01", "Clock In": "08:00", "Clock Out": "17:00" }]);
+    fetchRosterRows.mockResolvedValue([{ "Staff ID": "S007", "Staff Name": "Farrah Yusof", Date: "2026-08-01", "Clock In": "08:00", "Clock Out": "17:00" }]);
 
     await runRosterSync(payPeriodId);
 
     expect(pool.query).toHaveBeenCalledTimes(3);
-    expect(client.query).toHaveBeenCalledWith(expect.stringContaining("'matched'"), [payPeriodId, "staff-1", "2026-08-01", 9, "id", "08:00", "17:00"]);
+    expect(client.query).toHaveBeenCalledWith(expect.stringContaining("'matched'"), [payPeriodId, "staff-7", "2026-08-01", 9, "id", "08:00", "17:00"]);
   });
 
   test("uses name matching when no staff-ID match exists", async () => {
