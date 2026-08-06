@@ -75,6 +75,15 @@ async function listPeriods(req, res, next) {
   }
 }
 
+async function listStaff(req, res, next) {
+  try {
+    const result = await runService.listStaff();
+    res.ok(result.data);
+  } catch (err) {
+    next(err);
+  }
+}
+
 async function calculate(req, res, next) {
   try {
     if (!checkUuid(res, req.params.periodId, 'PERIOD_NOT_FOUND', 'pay period')) return;
@@ -179,6 +188,7 @@ async function runs(req, res, next) {
 
 module.exports = {
   listPeriods,
+  listStaff,
   calculate,
   recalculate,
   submitApproval,
