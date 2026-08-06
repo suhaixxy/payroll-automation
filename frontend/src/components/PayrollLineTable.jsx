@@ -31,8 +31,8 @@ function PayrollLineTable({ lines }) {
             <th className="numeric">Incentive</th>
             <th className="numeric">CPF (Employee)</th>
             <th className="numeric">CPF (Employer)</th>
-            <th className="numeric">SDL</th>
-            <th className="numeric">Net Pay</th>
+            <th className="numeric">SDL (Employer)</th>
+            <th className="numeric">Net Payable</th>
             <th>Status</th>
           </tr>
         </thead>
@@ -44,7 +44,15 @@ function PayrollLineTable({ lines }) {
               <td>{line.employmentType === 'full_time' ? 'Full-time' : 'Part-time'}</td>
               <td className="numeric">{formatCents(line.grossPayCents)}</td>
               <td className="numeric">{formatCents(line.incentiveCents)}</td>
-              <td className="numeric">{formatCents(line.cpfEmployeeCents)}</td>
+              <td className="numeric">
+                {line.cpfEligible === false ? (
+                  // Correct behaviour for e.g. work-pass holders (guide §5.5)
+                  // — badged so a $0 here isn't mistaken for a bug.
+                  <span className="badge">CPF exempt</span>
+                ) : (
+                  formatCents(line.cpfEmployeeCents)
+                )}
+              </td>
               <td className="numeric">{formatCents(line.cpfEmployerCents)}</td>
               <td className="numeric">{formatCents(line.sdlCents)}</td>
               <td className="numeric">

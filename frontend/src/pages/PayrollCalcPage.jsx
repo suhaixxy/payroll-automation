@@ -9,8 +9,10 @@ import {
 } from '../api/client';
 import PayrollLineTable, { formatCents } from '../components/PayrollLineTable';
 import LoginPanel from '../components/LoginPanel';
-// Shared status contract (UC-003 guide §5.1) — same module the backend uses.
-import { PAYROLL_STATUS } from '../../../shared/payrollStatus.mjs';
+// Shared status contract (UC-003 guide §5.1) — same file the backend uses.
+import payrollStatus from '../../../shared/payrollStatus.json';
+
+const PAYROLL_STATUS = payrollStatus.statuses;
 
 // UC-003 page: accounting staff pick a validated pay period and run the
 // payroll calculation on its frozen hour snapshot. Shows derived period
@@ -234,8 +236,7 @@ function PayrollCalcPage() {
           </span>
           <span>
             {payroll.incompleteCount} {payroll.incompleteCount === 1 ? 'line is' : 'lines are'}{' '}
-            incomplete (missing pay rate or required performance input) and excluded from the period
-            totals — see the notes in the table below.
+            incomplete and excluded from the period totals — see the reasons in the table below.
           </span>
         </div>
       )}
@@ -248,9 +249,14 @@ function PayrollCalcPage() {
             <p className="stat-sub">complete lines only</p>
           </div>
           <div className="stat-tile">
-            <p className="stat-label">Deductions</p>
+            <p className="stat-label">Employee Deductions</p>
             <div className="stat-value">{formatCents(payroll.totals.deductionsCents)}</div>
-            <p className="stat-sub">CPF (employee) + SDL</p>
+            <p className="stat-sub">CPF (employee) only</p>
+          </div>
+          <div className="stat-tile">
+            <p className="stat-label">Employer Cost</p>
+            <div className="stat-value">{formatCents(payroll.totals.employerCostCents ?? 0)}</div>
+            <p className="stat-sub">CPF (employer) + SDL — not deducted from pay</p>
           </div>
           <div className="stat-tile">
             <p className="stat-label">Net Payable</p>
