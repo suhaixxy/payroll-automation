@@ -215,6 +215,26 @@ async function executeRun(periodId, actor, { recalculate = false } = {}) {
       });
     }
 
+    // §5.4: non-deleted adjustments fold into gross (and, when
+    // cpf_applicable, into the CPF wage base) inside the engine.
+    const adjustmentRows = await sequelize.query(
+      `SELECT staff_id AS "staffId", adjustment_type AS "adjustmentType",
+              amount, cpf_applicable AS "cpfApplicable", reason
+       FROM payroll_adjustments
+       WHERE period_id = :periodId AND deleted_at IS NULL`,
+      { replacements: { periodId }, type: QueryTypes.SELECT, transaction }
+    );
+    const adjustmentsByStaff = new Map();
+    for (const adjustment of adjustmentRows) {
+      if (!adjustmentsByStaff.has(adjustment.staffId)) adjustmentsByStaff.set(adjustment.staffId, []);
+      adjustmentsByStaff.get(adjustment.staffId).push({
+        adjustmentType: adjustment.adjustmentType,
+        amountCents: toHundredths(adjustment.amount),
+        cpfApplicable: adjustment.cpfApplicable,
+        reason: adjustment.reason,
+      });
+    }
+
     // ── calculate and persist the run-scoped lines ──
     const totals = { gross: 0, employeeDeductions: 0, employerCost: 0, net: 0 };
     let linesComplete = 0;
@@ -226,6 +246,7 @@ async function executeRun(periodId, actor, { recalculate = false } = {}) {
         hourRows: hoursByStaff.get(staff.id) || [],
         rate: rateByStaff.get(staff.id) || null,
         performanceInputs: inputsByStaff.get(staff.id) || [],
+        adjustments: adjustmentsByStaff.get(staff.id) || [],
         rateSet,
         periodEndDate: period.endDate,
       });
@@ -248,7 +269,7 @@ async function executeRun(periodId, actor, { recalculate = false } = {}) {
             line_status, incomplete_reasons, calc_breakdown)
          VALUES
            (:runId, :staffId, :periodId, :regularHours, :otHours, :phHours,
-            :hourlyRateUsed, :grossFromHours, :incentiveAmount, 0,
+            :hourlyRateUsed, :grossFromHours, :incentiveAmount, :adjustmentsTotal,
             :grossTotal, :cpfEmployee, :cpfEmployer, :sdl, :netPay,
             :lineStatus, :incompleteReasons, :calcBreakdown)`,
         {
@@ -262,6 +283,7 @@ async function executeRun(periodId, actor, { recalculate = false } = {}) {
             hourlyRateUsed: result.hourlyRateCents === null ? null : centsToMoney(result.hourlyRateCents),
             grossFromHours: centsToMoney(result.grossFromHoursCents),
             incentiveAmount: centsToMoney(result.incentiveCents),
+            adjustmentsTotal: centsToMoney(result.adjustmentsTotalCents),
             grossTotal: centsToMoney(result.grossTotalCents),
             cpfEmployee: centsToMoney(result.cpfEmployeeCents),
             cpfEmployer: centsToMoney(result.cpfEmployerCents),
@@ -580,6 +602,22 @@ async function getRuns(periodId) {
   return { data: { period, runs } };
 }
 
+/** Active staff for form pickers (read-only shared-table access, §3.1). */
+async function listStaff() {
+  const staff = await sequelize.query(
+    `SELECT id,
+            external_ref AS "externalRef",
+            full_name AS "fullName",
+            employment_type AS "employmentType",
+            cpf_eligible AS "cpfEligible"
+     FROM staff
+     WHERE status = 'active'
+     ORDER BY external_ref`,
+    { type: QueryTypes.SELECT }
+  );
+  return { data: { staff } };
+}
+
 /** Periods with status for the picker (read-only, any authenticated user). */
 async function listPeriods() {
   const periods = await sequelize.query(
@@ -603,5 +641,6 @@ module.exports = {
   getLine,
   getRuns,
   listPeriods,
+  listStaff,
   VARIANCE_THRESHOLD,
 };

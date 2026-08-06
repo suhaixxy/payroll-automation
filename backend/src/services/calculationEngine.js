@@ -107,6 +107,9 @@ const fmtPct = (bp) => `${(bp / 100).toString()}%`;
  *   the frozen per-shift snapshot rows (empty array = no hours recorded).
  * @param {{hourlyRateCents:number}|null} args.rate - the pinned hourly rate.
  * @param {Array<{inputType:string, quantityHundredths:number, unitValueCents:number}>} args.performanceInputs
+ * @param {Array<{adjustmentType:string, amountCents:number, cpfApplicable:boolean, reason:string}>} args.adjustments
+ *   non-deleted payroll adjustments for this staff+period (§5.4). Amounts
+ *   are SIGNED cents — negative reduces pay.
  * @param {object} args.rateSet - from rateSetService (bp/cents form).
  * @param {string} args.periodEndDate - 'YYYY-MM-DD'; age is taken as at this date.
  * @returns {{
@@ -119,7 +122,15 @@ const fmtPct = (bp) => `${(bp / 100).toString()}%`;
  *   incompleteReasons:Array<{code:string,message:string}>, breakdown:Array<object>
  * }}
  */
-function calculateLine({ staff, hourRows = [], rate, performanceInputs = [], rateSet, periodEndDate }) {
+function calculateLine({
+  staff,
+  hourRows = [],
+  rate,
+  performanceInputs = [],
+  adjustments = [],
+  rateSet,
+  periodEndDate,
+}) {
   const reasons = [];
   const breakdown = [];
 
@@ -209,11 +220,27 @@ function calculateLine({ staff, hourRows = [], rate, performanceInputs = [], rat
     }
   }
 
-  // §5.4: adjustments join the gross here in phase 4.7 (adjustments_total,
-  // with a separate CPF wage base for cpf_applicable ones). Until then the
-  // wage base equals the gross.
-  const grossTotalCents = grossFromHoursCents + incentiveCents;
-  const cpfWageBaseCents = grossTotalCents;
+  // §5.4: adjustments enter the gross; ONLY cpf_applicable ones enter the
+  // CPF wage base, which is therefore computed separately from gross_total.
+  let adjustmentsTotalCents = 0;
+  let cpfApplicableAdjustmentsCents = 0;
+  for (const adjustment of adjustments) {
+    adjustmentsTotalCents += adjustment.amountCents;
+    if (adjustment.cpfApplicable) cpfApplicableAdjustmentsCents += adjustment.amountCents;
+    breakdown.push({
+      label: `Adjustment — ${adjustment.adjustmentType}`,
+      detail: adjustment.reason || '',
+      amount: dollars(adjustment.amountCents),
+    });
+  }
+
+  const grossTotalCents = grossFromHoursCents + incentiveCents + adjustmentsTotalCents;
+  // Clamped at zero: a clawback can push pay negative, but statutory
+  // contributions are never computed on a negative wage.
+  const cpfWageBaseCents = Math.max(
+    0,
+    grossFromHoursCents + incentiveCents + cpfApplicableAdjustmentsCents
+  );
 
   breakdown.push({ label: 'Gross total', detail: '', amount: dollars(grossTotalCents), isSubtotal: true });
 
@@ -264,6 +291,7 @@ function calculateLine({ staff, hourRows = [], rate, performanceInputs = [], rat
     hourlyRateCents: rate ? rate.hourlyRateCents : null,
     grossFromHoursCents,
     incentiveCents,
+    adjustmentsTotalCents,
     grossTotalCents,
     cpfEmployeeCents: cpf.employeeCents,
     cpfEmployerCents: cpf.employerCents,
