@@ -1,32 +1,89 @@
-// Shared audit logger (per the design doc's "Audit Logger" component, used
-// by all use cases). Records who did what and when, so past actions
-// (e.g. sync runs) can be looked up later instead of only ever seeing the
-// current state.
+const { AuditLog } = require("../models");
 
-const { pool } = require("../config/database");
+const safeDetails = (details = {}) => {
+  const blockedKeys = new Set([
+    "password",
+    "passwordHash",
+    "password_hash",
+    "token",
+    "jwt",
+    "bank_account_no",
+  ]);
 
-async function logAction({ entityType, entityId, action, actor, detail }) {
-  await pool.query(
-    `INSERT INTO audit_log (entity_type, entity_id, action, actor, detail) VALUES ($1, $2, $3, $4, $5)`,
-    [entityType, entityId, action, actor, detail ? JSON.stringify(detail) : null]
+  return Object.fromEntries(
+    Object.entries(details || {}).filter(([key]) => !blockedKeys.has(key))
   );
-}
+};
 
-async function getHistory(entityType, entityId, limit = 10) {
-  const { rows } = await pool.query(
-    `SELECT action, actor, detail, created_at
-     FROM audit_log
-     WHERE entity_type = $1 AND entity_id = $2
-     ORDER BY created_at DESC
-     LIMIT $3`,
-    [entityType, entityId, limit]
-  );
-  return rows.map((row) => ({
-    action: row.action,
-    actor: row.actor,
-    detail: row.detail,
-    createdAt: row.created_at.toISOString(),
-  }));
-}
+// ==========================================================
+// UC-005 / shared audit API
+// ==========================================================
 
-module.exports = { logAction, getHistory };
+const record = async ({
+  user = null,
+  action,
+  entityType,
+  entityId = null,
+  ipAddress = null,
+  details = {},
+}) =>
+  AuditLog.create({
+    user_id: user?.id || null,
+    user_role: user?.role || null,
+    action,
+    entity_type: entityType,
+    entity_id: entityId,
+    actor: user?.email || "anonymous",
+    ip_address: ipAddress,
+    details: safeDetails(details),
+  });
+
+// ==========================================================
+// Compatibility API used by UC-001
+// ==========================================================
+
+const logAction = async ({
+  entityType,
+  entityId,
+  action,
+  actor,
+  detail,
+}) =>
+  AuditLog.create({
+    user_id: null,
+    user_role: null,
+    action,
+    entity_type: entityType,
+    entity_id: entityId,
+    actor: actor || "system",
+    ip_address: null,
+    details: safeDetails(detail || {}),
+  });
+
+const getHistory = async (entityType, entityId, limit = 10) => {
+  const rows = await AuditLog.findAll({
+    where: {
+      entity_type: entityType,
+      entity_id: entityId,
+    },
+    order: [["created_at", "DESC"]],
+    limit,
+  });
+
+  return rows.map((row) => {
+    const values = row.get({ plain: true });
+
+    return {
+      action: values.action,
+      actor: values.actor,
+      detail: values.details,
+      createdAt: values.created_at || values.createdAt,
+    };
+  });
+};
+
+module.exports = {
+  record,
+  logAction,
+  getHistory,
+};

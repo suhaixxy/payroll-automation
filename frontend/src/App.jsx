@@ -1,33 +1,98 @@
-import { BrowserRouter, Routes, Route, Link } from "react-router-dom";
+import { Navigate, Route, Routes } from "react-router-dom";
+
+import AppLayout from "./components/AppLayout";
+import { AuthProvider, useAuth } from "./context/AuthContext";
+
+import ApprovalPage from "./pages/ApprovalPage";
 import DashboardPage from "./pages/DashboardPage";
+import LoginPage from "./pages/LoginPage";
+import NotFoundPage from "./pages/NotFoundPage";
+import PaymentBatchDetailsPage from "./pages/PaymentBatchDetailsPage";
+import PaymentBatchesPage from "./pages/PaymentBatchesPage";
+import PaymentPreviewPage from "./pages/PaymentPreviewPage";
+import PayrollCalcPage from "./pages/PayrollCalcPage";
+import PayslipDetailsPage from "./pages/PayslipDetailsPage";
+import PayslipsPage from "./pages/PayslipsPage";
+import ProfilePage from "./pages/ProfilePage";
+import ReviewEmployeesPage from "./pages/ReviewEmployeesPage";
 import RosterSyncPage from "./pages/RosterSyncPage";
 import TimesheetValidationPage from "./pages/TimesheetValidationPage";
-import PayrollCalcPage from "./pages/PayrollCalcPage";
-import ApprovalPage from "./pages/ApprovalPage";
-import PaymentPage from "./pages/PaymentPage";
 
-function App() {
+import ProtectedRoute from "./routes/ProtectedRoute";
+import RoleRoute from "./routes/RoleRoute";
+
+function RoleLanding() {
+  const { user } = useAuth();
+
   return (
-    <BrowserRouter>
-      <nav style={{ padding: "1rem", borderBottom: "1px solid #ccc" }}>
-        <Link to="/" style={{ marginRight: "1rem" }}>Dashboard</Link>
-        <Link to="/roster" style={{ marginRight: "1rem" }}>UC-001 Roster</Link>
-        <Link to="/timesheets" style={{ marginRight: "1rem" }}>UC-002 Timesheets</Link>
-        <Link to="/payroll" style={{ marginRight: "1rem" }}>UC-003 Payroll</Link>
-        <Link to="/approvals" style={{ marginRight: "1rem" }}>UC-004 Approvals</Link>
-        <Link to="/payments">UC-005 Payments</Link>
-      </nav>
-
-      <Routes>
-        <Route path="/" element={<DashboardPage />} />
-        <Route path="/roster" element={<RosterSyncPage />} />
-        <Route path="/timesheets" element={<TimesheetValidationPage />} />
-        <Route path="/payroll" element={<PayrollCalcPage />} />
-        <Route path="/approvals" element={<ApprovalPage />} />
-        <Route path="/payments" element={<PaymentPage />} />
-      </Routes>
-    </BrowserRouter>
+    <Navigate
+      to={user?.role === "manager" ? "/dashboard" : "/payslips"}
+      replace
+    />
   );
 }
 
-export default App;
+export default function App() {
+  return (
+    <AuthProvider>
+      <Routes>
+        {/* Public route */}
+        <Route path="/login" element={<LoginPage />} />
+
+        {/* Authenticated routes */}
+        <Route element={<ProtectedRoute />}>
+          <Route element={<AppLayout />}>
+            <Route index element={<RoleLanding />} />
+
+            {/* Shared authenticated routes */}
+            <Route path="/profile" element={<ProfilePage />} />
+            <Route path="/payslips" element={<PayslipsPage />} />
+            <Route
+              path="/payslips/:payslipId"
+              element={<PayslipDetailsPage />}
+            />
+
+            {/* Manager-only routes */}
+            <Route element={<RoleRoute allowedRoles={["manager"]} />}>
+              <Route path="/dashboard" element={<DashboardPage />} />
+
+              {/* UC-001 */}
+              <Route path="/roster" element={<RosterSyncPage />} />
+
+              {/* UC-002 */}
+              <Route
+                path="/timesheets"
+                element={<TimesheetValidationPage />}
+              />
+
+              {/* UC-003 */}
+              <Route path="/payroll" element={<PayrollCalcPage />} />
+
+              {/* UC-004 */}
+              <Route path="/approvals" element={<ApprovalPage />} />
+
+              {/* UC-005 */}
+              <Route
+                path="/payments/preview"
+                element={<PaymentPreviewPage />}
+              />
+              <Route
+                path="/payments/review-employees"
+                element={<ReviewEmployeesPage />}
+              />
+              <Route path="/payments" element={<PaymentBatchesPage />} />
+              <Route
+                path="/payments/:batchId"
+                element={<PaymentBatchDetailsPage />}
+              />
+            </Route>
+
+            <Route path="*" element={<NotFoundPage />} />
+          </Route>
+        </Route>
+
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Routes>
+    </AuthProvider>
+  );
+}

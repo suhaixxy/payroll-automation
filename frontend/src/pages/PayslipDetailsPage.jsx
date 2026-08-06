@@ -1,0 +1,20 @@
+import { ArrowBackRounded, DownloadRounded } from "@mui/icons-material";
+import { Box, Button, Card, CardContent, CircularProgress, Divider, Grid, Snackbar, Typography } from "@mui/material";
+import { useCallback, useEffect, useState } from "react";
+import { useNavigate, useParams } from "react-router-dom";
+import { downloadPayslipPdf, getPayslip } from "../api/payslipApi";
+import { ErrorState, PageHeader } from "../components/CommonComponents";
+import { formatCurrency, formatDate, formatPeriod, getErrorMessage, saveBlobResponse } from "../utils";
+
+const rows = (payslip) => [["Gross pay", payslip.grossPay], ["Incentive pay", payslip.incentivePay], ["CPF amount", payslip.cpfAmount], ["SDL amount", payslip.sdlAmount], ["Other deduction", payslip.otherDeduction]];
+
+export default function PayslipDetailsPage() {
+  const { payslipId } = useParams(); const navigate = useNavigate(); const [payslip, setPayslip] = useState(null); const [loading, setLoading] = useState(true); const [error, setError] = useState(""); const [downloading, setDownloading] = useState(false); const [notice, setNotice] = useState("");
+  const load = useCallback(async () => { setLoading(true); setError(""); try { setPayslip(await getPayslip(payslipId)); } catch (requestError) { setError(getErrorMessage(requestError, "Unable to load payslip.")); } finally { setLoading(false); } }, [payslipId]); useEffect(() => { load(); }, [load]);
+  const download = async () => { setDownloading(true); try { const response = await downloadPayslipPdf(payslip.id); setNotice(`${saveBlobResponse(response, `${payslip.payslipReference}.pdf`)} downloaded.`); } catch (requestError) { setError(getErrorMessage(requestError, "Payslip PDF download failed.")); } finally { setDownloading(false); } };
+  if (loading) return <Box sx={{ display: "grid", placeItems: "center", minHeight: 400 }}><CircularProgress /></Box>;
+  if (!payslip) return <Box className="content-page"><ErrorState message={error} onRetry={load} /></Box>;
+  return <Box className="page-enter content-page"><PageHeader title={payslip.payslipReference} subtitle={formatPeriod(payslip.payPeriodStart, payslip.payPeriodEnd)} actions={<Box sx={{ display: "flex", gap: 1 }}><Button startIcon={<ArrowBackRounded />} color="inherit" onClick={() => navigate(-1)}>Back</Button><Button variant="contained" startIcon={downloading ? <CircularProgress size={17} color="inherit" /> : <DownloadRounded />} disabled={downloading} onClick={download}>Download PDF</Button></Box>} />{error && <ErrorState message={error} />}
+    <Grid container spacing={2.5}><Grid size={{ xs: 12, md: 7 }}><Card><CardContent sx={{ p: 3 }}><Typography variant="h2">Approved payroll snapshot</Typography>{rows(payslip).map(([label, value]) => <Box key={label} className="payslip-value-row"><Typography color="text.secondary">{label}</Typography><Typography fontWeight={700}>{formatCurrency(value)}</Typography></Box>)}<Divider sx={{ my: 1.5 }} /><Box className="payslip-value-row"><Typography variant="h3">Net pay</Typography><Typography variant="h2" color="primary.main">{formatCurrency(payslip.netPay)}</Typography></Box></CardContent></Card></Grid><Grid size={{ xs: 12, md: 5 }}><Card><CardContent sx={{ p: 3 }}><Typography variant="h2">Payslip information</Typography><Box className="detail-grid compact"><Typography color="text.secondary">Employee</Typography><Typography>{payslip.employeeName}</Typography><Typography color="text.secondary">Employee reference</Typography><Typography>{payslip.employeeReference}</Typography><Typography color="text.secondary">Company</Typography><Typography>{payslip.companyName}</Typography><Typography color="text.secondary">Payment batch</Typography><Typography>{payslip.batchReference}</Typography><Typography color="text.secondary">Generated</Typography><Typography>{formatDate(payslip.generatedAt)}</Typography></Box></CardContent></Card></Grid></Grid><Snackbar open={Boolean(notice)} autoHideDuration={4000} onClose={() => setNotice("")} message={notice} />
+  </Box>;
+}
