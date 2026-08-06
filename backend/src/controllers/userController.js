@@ -4,6 +4,7 @@
 
 const yup = require('yup');
 const authService = require('../services/authService');
+const User = require('../models/User');
 
 const registerSchema = yup.object({
   name: yup.string().trim().min(2).max(100).required(),
@@ -59,9 +60,23 @@ async function login(req, res, next) {
   }
 }
 
-// GET /api/user/auth — validateToken already verified the JWT and set req.user.
-async function auth(req, res) {
-  res.status(200).json({ user: req.user });
+// GET /api/user/auth — validateToken already verified the JWT and set
+// req.user. Additionally confirm the account still EXISTS: a token can
+// outlive its user (e.g. `npm run db:reset` wipes the users table), and a
+// ghost session would otherwise hit foreign-key errors on its first write.
+async function auth(req, res, next) {
+  try {
+    const user = await User.findByPk(req.user.id);
+    if (!user) {
+      return res.status(401).json({
+        error: 'STALE_SESSION',
+        message: 'This account no longer exists (database was reset?) — log in again.',
+      });
+    }
+    res.status(200).json({ user: req.user });
+  } catch (err) {
+    next(err);
+  }
 }
 
 module.exports = { register, login, auth };
