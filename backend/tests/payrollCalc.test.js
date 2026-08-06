@@ -1,14 +1,10 @@
-// UC-003 integration tests: the full calculation run through the HTTP API
-// against throwaway data (own staff/period/rate set, created in beforeAll
-// and deleted in afterAll). UC-002's frozen snapshot is stubbed by inserting
-// frozen timesheet rows directly. The per-rule unit tests live in
-// src/services/__tests__/calculationEngine.test.js — this file covers the
-// wiring: endpoint guards (401/404/409/422), persistence, derived totals,
-// and the §5.6 employer-borne SDL split at the period level.
-//
-// (Rewritten in phase 2: the previous version asserted the old engine's
-// behaviour — SDL deducted from net pay, scheme-based incentives — which
-// the guide explicitly corrects.)
+// UC-003 phase 3.6 integration tests: the /api/uc003 run lifecycle through
+// the HTTP API — calculate → 409 → recalculate (new run) → void (manager,
+// reason required) → submit-approval (manager, 422 while incomplete) — plus
+// the RBAC (401/403) and state-guard (404/409/422) paths. Throwaway data
+// (own staff/periods/rate set) created in beforeAll, deleted in afterAll.
+// Per-rule calculation maths is pinned in
+// src/services/__tests__/calculationEngine.test.js.
 //
 // Test data lives in 2030 with its own rate set (newest effective_from wins
 // for those dates), so seeded 2026 data can never interfere.
@@ -21,14 +17,22 @@ const { pool } = require('../src/config/database');
 const { initializeDatabase } = require('../src/db/initializeDatabase');
 const { sequelize, syncUc003Tables, PayRate, User } = require('../src/models');
 
-const TEST_EMAIL = 'uc003-calc-tester@test.local';
-const TEST_PASSWORD = 'calc-test-password';
+const ACCOUNTING_EMAIL = 'uc003-accounting@test.local';
+const MANAGER_EMAIL = 'uc003-manager@test.local';
+const PASSWORD = 'calc-test-password';
 const TEST_RATE_SET_ID = '00000000-0000-4000-8000-000000000357';
 
-let token;
+let accountingToken;
+let managerToken;
 let periodId;
 let emptyRateSetPeriodId; // a 2020 period no rate set covers
-const staffIds = {}; // key -> uuid
+const staffIds = {};
+
+async function registerAndLogin(name, email, role) {
+  await request(app).post('/api/user/register').send({ name, email, password: PASSWORD, role });
+  const login = await request(app).post('/api/user/login').send({ email, password: PASSWORD });
+  return login.body.accessToken;
+}
 
 async function createStaff(externalRef, fullName, employmentType, cpfEligible, dateOfBirth) {
   const { rows } = await pool.query(
@@ -43,18 +47,19 @@ async function createStaff(externalRef, fullName, employmentType, cpfEligible, d
 }
 
 async function cleanup() {
-  const { rows: staleStaff } = await pool.query(
-    `SELECT id FROM staff WHERE external_ref IN ('T-PTA', 'T-FTB', 'T-PTC')`
-  );
-  const ids = staleStaff.map((row) => row.id);
   const { rows: stalePeriods } = await pool.query(
     `SELECT id FROM pay_period WHERE start_date IN ('2030-07-01', '2020-01-01')`
   );
   for (const period of stalePeriods) {
-    await pool.query(`DELETE FROM payroll_line WHERE pay_period_id = $1`, [period.id]);
+    await pool.query(`DELETE FROM payroll_lines WHERE period_id = $1`, [period.id]);
+    await pool.query(`DELETE FROM calculation_runs WHERE period_id = $1`, [period.id]);
     await pool.query(`DELETE FROM performance_inputs WHERE period_id = $1`, [period.id]);
     await pool.query(`DELETE FROM timesheet WHERE pay_period_id = $1`, [period.id]);
   }
+  const { rows: staleStaff } = await pool.query(
+    `SELECT id FROM staff WHERE external_ref IN ('T-PTA', 'T-FTB', 'T-PTC')`
+  );
+  const ids = staleStaff.map((row) => row.id);
   if (ids.length > 0) {
     await pool.query(`DELETE FROM pay_rate WHERE staff_id = ANY($1::uuid[])`, [ids]);
     await pool.query(`DELETE FROM staff WHERE id = ANY($1::uuid[])`, [ids]);
@@ -64,7 +69,12 @@ async function cleanup() {
   }
   await pool.query(`DELETE FROM cpf_rate_bands WHERE rate_set_id = $1`, [TEST_RATE_SET_ID]);
   await pool.query(`DELETE FROM statutory_rate_sets WHERE id = $1`, [TEST_RATE_SET_ID]);
-  await User.destroy({ where: { email: TEST_EMAIL } });
+  // Test users can't be removed while audit rows reference them.
+  await pool.query(
+    `DELETE FROM uc003_audit_log WHERE actor_id IN (SELECT id FROM users WHERE email = ANY($1))`,
+    [[ACCOUNTING_EMAIL, MANAGER_EMAIL]]
+  );
+  await User.destroy({ where: { email: [ACCOUNTING_EMAIL, MANAGER_EMAIL] } });
 }
 
 beforeAll(async () => {
@@ -72,17 +82,10 @@ beforeAll(async () => {
   await syncUc003Tables();
   await cleanup(); // a previous run may have died before its afterAll
 
-  // Login identity (accounting is allowed to calculate).
-  await request(app)
-    .post('/api/user/register')
-    .send({ name: 'Calc Tester', email: TEST_EMAIL, password: TEST_PASSWORD, role: 'accounting' });
-  const login = await request(app)
-    .post('/api/user/login')
-    .send({ email: TEST_EMAIL, password: TEST_PASSWORD });
-  token = login.body.accessToken;
+  accountingToken = await registerAndLogin('Calc Accounting', ACCOUNTING_EMAIL, 'accounting');
+  managerToken = await registerAndLogin('Calc Manager', MANAGER_EMAIL, 'manager');
 
-  // Rate set effective for the 2030 test window (same figures as the seed).
-  const { rows: userRows } = await pool.query(`SELECT id FROM users WHERE email = $1`, [TEST_EMAIL]);
+  const { rows: userRows } = await pool.query(`SELECT id FROM users WHERE email = $1`, [MANAGER_EMAIL]);
   await pool.query(
     `INSERT INTO statutory_rate_sets
        (id, version_label, effective_from, effective_to, sdl_rate, sdl_min, sdl_max,
@@ -99,7 +102,6 @@ beforeAll(async () => {
     [TEST_RATE_SET_ID]
   );
 
-  // A validated period with a frozen snapshot.
   const { rows: periodRows } = await pool.query(
     `INSERT INTO pay_period (start_date, end_date, status, validated_at)
      VALUES ('2030-07-01', '2030-07-14', 'validated', now()) RETURNING id`
@@ -146,103 +148,196 @@ afterAll(async () => {
   await pool.end();
 });
 
-describe('POST /api/payroll/calculate', () => {
+const asAccounting = (req) => req.set('Authorization', `Bearer ${accountingToken}`);
+const asManager = (req) => req.set('Authorization', `Bearer ${managerToken}`);
+
+describe('guards: auth, roles, state (§2.2, §3.5)', () => {
   test('401 without a token', async () => {
-    const response = await request(app).post('/api/payroll/calculate').send({ payPeriodId: periodId });
+    const response = await request(app).post(`/api/uc003/periods/${periodId}/calculate`);
     expect(response.status).toBe(401);
   });
 
+  test('403: accounting may not submit for approval or void a run', async () => {
+    const submit = await asAccounting(
+      request(app).post(`/api/uc003/periods/${periodId}/submit-approval`)
+    );
+    expect(submit.status).toBe(403);
+
+    const voidRun = await asAccounting(
+      request(app).post('/api/uc003/runs/00000000-0000-4000-8000-000000009999/void')
+    ).send({ reason: 'x' });
+    expect(voidRun.status).toBe(403);
+  });
+
   test('404 for an unknown period', async () => {
-    const response = await request(app)
-      .post('/api/payroll/calculate')
-      .set('Authorization', `Bearer ${token}`)
-      .send({ payPeriodId: '00000000-0000-4000-8000-000000009999' });
+    const response = await asAccounting(
+      request(app).post('/api/uc003/periods/00000000-0000-4000-8000-000000009999/calculate')
+    );
     expect(response.status).toBe(404);
+    expect(response.body.success).toBe(false);
   });
 
   test('422 when no statutory rate set covers the period', async () => {
-    const response = await request(app)
-      .post('/api/payroll/calculate')
-      .set('Authorization', `Bearer ${token}`)
-      .send({ payPeriodId: emptyRateSetPeriodId });
+    const response = await asAccounting(
+      request(app).post(`/api/uc003/periods/${emptyRateSetPeriodId}/calculate`)
+    );
     expect(response.status).toBe(422);
-    expect(response.body.error).toBe('NO_RATE_SET');
-  });
-
-  test('happy path: rate-set-pinned run with employer-borne SDL totals', async () => {
-    const response = await request(app)
-      .post('/api/payroll/calculate')
-      .set('Authorization', `Bearer ${token}`)
-      .send({ payPeriodId: periodId });
-
-    expect(response.status).toBe(200);
-    const data = response.body;
-
-    expect(data.status).toBe('pending_approval');
-    expect(data.rateSet.versionLabel).toBe('test-2030');
-    // The engine lines up EVERY active staff member: our 3 test staff plus
-    // the 3 seeded ones (who have no data in this test period and therefore
-    // come out incomplete and excluded from totals).
-    expect(data.lineCount).toBe(6);
-    expect(data.incompleteCount).toBe(4); // PT-C (no pay rate) + 3 seeded staff
-
-    // Hand-computed (per-step maths is pinned in the unit suite):
-    // PT-A: gross 904.50 (576 + 40.50 + 288); CPF employee floor(180.90) =
-    //   180.00; total round(334.665) = 335.00 -> employer 155.00; SDL 2.26;
-    //   net 724.50.
-    // FT-B: 360.00 incentive, CPF exempt 0/0, SDL min 2.00, net 360.00.
-    // PT-C: incomplete -> excluded from every total.
-    expect(data.totals.grossCents).toBe(90450 + 36000);
-    expect(data.totals.deductionsCents).toBe(18000); // CPF employee ONLY
-    expect(data.totals.employerCostCents).toBe(15500 + 226 + 200);
-    expect(data.totals.netCents).toBe(72450 + 36000);
-    // §5.6: net = gross − employee deductions; SDL never enters that chain.
-    expect(data.totals.netCents).toBe(data.totals.grossCents - data.totals.deductionsCents);
-  });
-
-  test('409 when the period is no longer validated (already calculated)', async () => {
-    const response = await request(app)
-      .post('/api/payroll/calculate')
-      .set('Authorization', `Bearer ${token}`)
-      .send({ payPeriodId: periodId });
-    expect(response.status).toBe(409);
-    expect(response.body.error).toBe('PAY_PERIOD_NOT_VALIDATED');
+    expect(response.body.error.code).toBe('NO_RATE_SET');
   });
 });
 
-describe('GET /api/payroll/:payPeriodId', () => {
-  test('returns lines with breakdown, reason codes and the CPF-exempt flag', async () => {
-    const response = await request(app)
-      .get(`/api/payroll/${periodId}`)
-      .set('Authorization', `Bearer ${token}`);
+describe('run lifecycle (§3.1, §3.2, §5.9)', () => {
+  test('calculate creates run #1 pinned to the rate set; period -> calculated', async () => {
+    const response = await asAccounting(request(app).post(`/api/uc003/periods/${periodId}/calculate`));
 
-    expect(response.status).toBe(200);
-    const lines = response.body.lines;
-    expect(lines.length).toBeGreaterThanOrEqual(3); // ours + every other active staff
+    expect(response.status).toBe(201);
+    const data = response.body.data;
+    expect(data.run.runNumber).toBe(1);
+    expect(data.run.rateSetVersion).toBe('test-2030');
+    expect(data.status).toBe('calculated');
 
-    const pta = lines.find((line) => line.externalRef === 'T-PTA');
-    expect(pta.lineStatus).toBe('complete');
-    expect(pta.netPayCents).toBe(72450);
-    expect(pta.sdlCents).toBe(226);
-    const breakdownLabels = pta.calcBreakdown.map((step) => step.label);
-    expect(breakdownLabels).toEqual(
-      expect.arrayContaining(['Regular hours', 'Overtime', 'Public holiday', 'Gross total', 'Net payable'])
-    );
-
-    const ftb = lines.find((line) => line.externalRef === 'T-FTB');
-    expect(ftb.cpfEligible).toBe(false);
-    expect(ftb.cpfEmployeeCents).toBe(0);
-    expect(ftb.lineStatus).toBe('complete');
-
-    const ptc = lines.find((line) => line.externalRef === 'T-PTC');
-    expect(ptc.lineStatus).toBe('incomplete');
-    expect(ptc.incompleteReasons.map((reason) => reason.code)).toEqual(['MISSING_PAY_RATE']);
+    // Complete: PT-A (904.50 gross / 180.00 CPF) + FT-B (360.00, exempt).
+    // Incomplete (excluded): PT-C no rate, plus the 3 seeded staff with no
+    // data in this test window.
+    expect(data.linesComplete).toBe(2);
+    expect(data.linesIncomplete).toBe(4);
+    expect(data.totals.gross).toBe('1264.50');
+    expect(data.totals.employeeDeductions).toBe('180.00'); // CPF employee ONLY
+    expect(data.totals.employerCost).toBe('159.26'); // 155.00 + 2.26 + 2.00
+    expect(data.totals.netPayable).toBe('1084.50'); // §5.6: SDL not deducted
   });
 
-  test('404 for a made-up period id', async () => {
-    const response = await request(app)
-      .get('/api/payroll/00000000-0000-4000-8000-000000009999')
-      .set('Authorization', `Bearer ${token}`);
-    expect(response.status).toBe(404);
+  test('409 calculating a period that is no longer validated', async () => {
+    const response = await asAccounting(request(app).post(`/api/uc003/periods/${periodId}/calculate`));
+    expect(response.status).toBe(409);
+    expect(response.body.error.code).toBe('PERIOD_NOT_VALIDATED');
+  });
+
+  test('recalculate creates run #2 and PRESERVES run #1 (§5.9)', async () => {
+    const response = await asAccounting(
+      request(app).post(`/api/uc003/periods/${periodId}/recalculate`)
+    );
+    expect(response.status).toBe(201);
+    expect(response.body.data.run.runNumber).toBe(2);
+
+    const history = await asAccounting(request(app).get(`/api/uc003/periods/${periodId}/runs`));
+    expect(history.status).toBe(200);
+    const runs = history.body.data.runs;
+    expect(runs.map((run) => run.runNumber)).toEqual([2, 1]);
+    expect(runs.every((run) => run.status === 'complete')).toBe(true);
+  });
+
+  test('lines endpoint serves the LATEST run with filters and paging (§6)', async () => {
+    const all = await asAccounting(request(app).get(`/api/uc003/periods/${periodId}/lines?limit=50`));
+    expect(all.status).toBe(200);
+    expect(all.body.data.run.runNumber).toBe(2);
+    expect(all.body.meta.total).toBe(6);
+
+    const incompleteOnly = await asAccounting(
+      request(app).get(`/api/uc003/periods/${periodId}/lines?status=incomplete`)
+    );
+    expect(incompleteOnly.body.meta.total).toBe(4);
+    expect(
+      incompleteOnly.body.data.lines.every((line) => line.lineStatus === 'incomplete')
+    ).toBe(true);
+
+    const searched = await asAccounting(
+      request(app).get(`/api/uc003/periods/${periodId}/lines?search=T-PTA`)
+    );
+    expect(searched.body.meta.total).toBe(1);
+    expect(searched.body.data.lines[0].netPay).toBe('724.50');
+  });
+
+  test('line detail includes the calc_breakdown and run provenance (§5.7)', async () => {
+    const list = await asAccounting(
+      request(app).get(`/api/uc003/periods/${periodId}/lines?search=T-PTA`)
+    );
+    const lineId = list.body.data.lines[0].id;
+
+    const detail = await asAccounting(request(app).get(`/api/uc003/lines/${lineId}`));
+    expect(detail.status).toBe(200);
+    const line = detail.body.data;
+    expect(line.runNumber).toBe(2);
+    expect(line.rateSetVersion).toBe('test-2030');
+    expect(line.calcBreakdown.map((step) => step.label)).toEqual(
+      expect.arrayContaining(['Regular hours', 'Overtime', 'Public holiday', 'Gross total', 'Net payable'])
+    );
+  });
+
+  test('void requires a reason (400) and demotes the run (§3.3)', async () => {
+    const history = await asAccounting(request(app).get(`/api/uc003/periods/${periodId}/runs`));
+    const runTwo = history.body.data.runs.find((run) => run.runNumber === 2);
+
+    const noReason = await asManager(request(app).post(`/api/uc003/runs/${runTwo.id}/void`)).send({});
+    expect(noReason.status).toBe(400);
+
+    const voided = await asManager(request(app).post(`/api/uc003/runs/${runTwo.id}/void`)).send({
+      reason: 'Wrong rate applied — integration test',
+    });
+    expect(voided.status).toBe(200);
+
+    const again = await asManager(request(app).post(`/api/uc003/runs/${runTwo.id}/void`)).send({
+      reason: 'twice',
+    });
+    expect(again.status).toBe(409);
+
+    // Run #1 becomes authoritative again.
+    const summary = await asAccounting(request(app).get(`/api/uc003/periods/${periodId}/summary`));
+    expect(summary.body.data.run.runNumber).toBe(1);
+  });
+});
+
+describe('submit to approval (§5.1, §6)', () => {
+  test('422 while any line of the authoritative run is incomplete', async () => {
+    const response = await asManager(
+      request(app).post(`/api/uc003/periods/${periodId}/submit-approval`)
+    );
+    expect(response.status).toBe(422);
+    expect(response.body.error.code).toBe('INCOMPLETE_LINES');
+  });
+
+  test('succeeds once every line is complete; period -> pending_approval', async () => {
+    // Force-complete the authoritative run's lines — resolving them for real
+    // is the phase 5 resolve-loop flow; here we test the endpoint guard.
+    const summary = await asAccounting(request(app).get(`/api/uc003/periods/${periodId}/summary`));
+    const runId = summary.body.data.run.id;
+    await pool.query(
+      `UPDATE payroll_lines SET line_status = 'complete', incomplete_reasons = NULL WHERE run_id = $1`,
+      [runId]
+    );
+
+    const response = await asManager(
+      request(app).post(`/api/uc003/periods/${periodId}/submit-approval`)
+    );
+    expect(response.status).toBe(200);
+    expect(response.body.data.status).toBe('pending_approval');
+  });
+
+  test('recalculating a pending_approval period is allowed and moves it back', async () => {
+    const response = await asAccounting(
+      request(app).post(`/api/uc003/periods/${periodId}/recalculate`)
+    );
+    expect(response.status).toBe(201);
+    expect(response.body.data.run.runNumber).toBe(3);
+    expect(response.body.data.status).toBe('calculated');
+  });
+
+  test('409 once the period is approved: no recalculation, no voiding (§5.9)', async () => {
+    // UC-004 owns the approved transition — simulated directly in SQL.
+    await pool.query(`UPDATE pay_period SET status = 'approved' WHERE id = $1`, [periodId]);
+
+    const recalc = await asAccounting(
+      request(app).post(`/api/uc003/periods/${periodId}/recalculate`)
+    );
+    expect(recalc.status).toBe(409);
+    expect(recalc.body.error.code).toBe('PERIOD_LOCKED');
+
+    const history = await asAccounting(request(app).get(`/api/uc003/periods/${periodId}/runs`));
+    const runThree = history.body.data.runs.find((run) => run.runNumber === 3);
+    const voided = await asManager(request(app).post(`/api/uc003/runs/${runThree.id}/void`)).send({
+      reason: 'should be refused',
+    });
+    expect(voided.status).toBe(409);
+    expect(voided.body.error.code).toBe('PERIOD_LOCKED');
   });
 });
