@@ -94,12 +94,63 @@ export function fetchPayrollSummary(periodId) {
   return authedFetch(`/api/uc003/periods/${encodeURIComponent(periodId)}/summary`);
 }
 
-export function fetchPayrollLines(periodId, query = 'limit=100') {
+// params: { status, search, sort, dir, page, limit } — empty values are
+// dropped so the URL only carries what the user actually set.
+export function fetchPayrollLines(periodId, params = {}) {
+  const query = new URLSearchParams();
+  for (const [key, value] of Object.entries(params)) {
+    if (value !== undefined && value !== null && value !== '') query.set(key, value);
+  }
+  if (!query.has('limit')) query.set('limit', '20');
   return authedFetch(`/api/uc003/periods/${encodeURIComponent(periodId)}/lines?${query}`);
+}
+
+// Single line with its full calc_breakdown + run provenance (§7.3 modal).
+export function fetchPayrollLine(lineId) {
+  return authedFetch(`/api/uc003/lines/${encodeURIComponent(lineId)}`);
 }
 
 export function fetchRunHistory(periodId) {
   return authedFetch(`/api/uc003/periods/${encodeURIComponent(periodId)}/runs`);
+}
+
+export function voidCalculationRun(runId, reason) {
+  return authedFetch(`/api/uc003/runs/${encodeURIComponent(runId)}/void`, {
+    method: 'POST',
+    body: JSON.stringify({ reason }),
+  });
+}
+
+// §7.2 per-staff net-pay deltas vs the previous period's run.
+export function fetchStaffVariance(periodId) {
+  return authedFetch(`/api/uc003/periods/${encodeURIComponent(periodId)}/variance`);
+}
+
+// §7.9 payroll register CSV. Can't be a plain <a href> because the endpoint
+// needs the Bearer token, so fetch the bytes and hand them to the browser
+// as a download.
+export async function downloadPayrollRegister(periodId) {
+  const token = getAccessToken();
+  const response = await fetch(
+    `/api/uc003/periods/${encodeURIComponent(periodId)}/export.csv`,
+    { headers: token ? { Authorization: `Bearer ${token}` } : {} }
+  );
+  if (!response.ok) {
+    const data = await response.json().catch(() => null);
+    return { ok: false, status: response.status, data };
+  }
+  const blob = await response.blob();
+  const disposition = response.headers.get('Content-Disposition') || '';
+  const filename = disposition.match(/filename="([^"]+)"/)?.[1] || 'payroll-register.csv';
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement('a');
+  anchor.href = url;
+  anchor.download = filename;
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  URL.revokeObjectURL(url);
+  return { ok: true, status: response.status, data: null };
 }
 
 // Staff options for the adjustment / performance-input forms (read-only).

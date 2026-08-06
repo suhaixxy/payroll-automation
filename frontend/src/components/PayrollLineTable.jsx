@@ -15,11 +15,30 @@ export function formatMoney(value) {
 // on the pay-rate ownership decision (§3.3); the hours codes are UC-002's.
 const RESOLVABLE = ['MISSING_PERFORMANCE_INPUT'];
 
-function PayrollLineTable({ lines, onResolve }) {
+// Column key → the server-side sort key it maps to (runService.LINE_SORTS).
+// Columns without an entry simply aren't sortable.
+function SortableHeader({ label, sortKey, sort, dir, onSort, numeric }) {
+  if (!onSort) return <th className={numeric ? 'numeric' : undefined}>{label}</th>;
+  const active = sort === sortKey;
+  return (
+    <th className={numeric ? 'numeric' : undefined} aria-sort={active ? (dir === 'desc' ? 'descending' : 'ascending') : undefined}>
+      <button type="button" className="th-sort" onClick={() => onSort(sortKey)}>
+        {label}
+        <span className="th-sort-arrow" aria-hidden="true">
+          {active ? (dir === 'desc' ? ' ▼' : ' ▲') : ''}
+        </span>
+      </button>
+    </th>
+  );
+}
+
+function PayrollLineTable({ lines, onResolve, onShowBreakdown, sort, dir, onSort, filtered }) {
   if (!lines || lines.length === 0) {
     return (
       <p className="empty-state">
-        No payroll lines for this period yet — pick a validated period and run the calculation.
+        {filtered
+          ? 'No lines match the current search/filter — clear them to see every staff member.'
+          : 'No payroll lines for this period yet — pick a validated period and run the calculation.'}
       </p>
     );
   }
@@ -30,16 +49,17 @@ function PayrollLineTable({ lines, onResolve }) {
         <thead>
           <tr>
             <th>Staff ID</th>
-            <th>Name</th>
+            <SortableHeader label="Name" sortKey="name" sort={sort} dir={dir} onSort={onSort} />
             <th>Type</th>
             <th className="numeric">Hours Gross</th>
             <th className="numeric">Incentive</th>
-            <th className="numeric">Gross Total</th>
+            <SortableHeader label="Gross Total" sortKey="gross" sort={sort} dir={dir} onSort={onSort} numeric />
             <th className="numeric">CPF (Employee)</th>
             <th className="numeric">CPF (Employer)</th>
             <th className="numeric">SDL (Employer)</th>
-            <th className="numeric">Net Payable</th>
-            <th>Status</th>
+            <SortableHeader label="Net Payable" sortKey="net" sort={sort} dir={dir} onSort={onSort} numeric />
+            <SortableHeader label="Status" sortKey="status" sort={sort} dir={dir} onSort={onSort} />
+            {onShowBreakdown && <th />}
           </tr>
         </thead>
         <tbody>
@@ -92,6 +112,18 @@ function PayrollLineTable({ lines, onResolve }) {
                     </div>
                   )}
               </td>
+              {onShowBreakdown && (
+                <td>
+                  <button
+                    type="button"
+                    className="row-action"
+                    onClick={() => onShowBreakdown(line)}
+                    title="How this line was calculated"
+                  >
+                    Details
+                  </button>
+                </td>
+              )}
             </tr>
           ))}
         </tbody>

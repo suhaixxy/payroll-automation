@@ -9,16 +9,22 @@ import {
   submitForApproval,
   fetchPayrollSummary,
   fetchPayrollLines,
+  downloadPayrollRegister,
 } from '../api/client';
 import PayrollLineTable, { formatMoney } from '../components/PayrollLineTable';
 import AdjustmentsPanel from '../components/AdjustmentsPanel';
 import PerformanceInputsPanel from '../components/PerformanceInputsPanel';
 import RateSetsPanel from '../components/RateSetsPanel';
+import RunHistoryPanel from '../components/RunHistoryPanel';
+import StaffVariancePanel from '../components/StaffVariancePanel';
+import LineBreakdownModal from '../components/LineBreakdownModal';
 import LoginPanel from '../components/LoginPanel';
 // Shared status contract (UC-003 guide §5.1) — same file the backend uses.
 import payrollStatus from '../../../shared/payrollStatus.json';
 
 const PAYROLL_STATUS = payrollStatus.statuses;
+const LINES_PER_PAGE = 20;
+const DEFAULT_LINE_QUERY = { search: '', status: '', sort: 'name', dir: 'asc', page: 1 };
 
 // UC-003 page: pick a validated pay period and run the payroll calculation
 // on its frozen hour snapshot. Every execution is a numbered, immutable
@@ -32,14 +38,25 @@ function PayrollCalcPage() {
   const [payPeriods, setPayPeriods] = useState([]);
   const [selectedPeriodId, setSelectedPeriodId] = useState('');
   const [summary, setSummary] = useState(null); // { period, run, variance... }
-  const [lines, setLines] = useState(null);
   const [loading, setLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState(null);
   const [successMessage, setSuccessMessage] = useState(null);
-  const [activeTab, setActiveTab] = useState('lines'); // 'lines' | 'adjustments' | 'inputs'
+  const [activeTab, setActiveTab] = useState('lines'); // lines | adjustments | inputs | rates | runs
   const [dataChangedSinceRun, setDataChangedSinceRun] = useState(false);
   // §5.8 resolve loop: which staff member's missing input we're fixing.
   const [resolveStaffId, setResolveStaffId] = useState(null);
+
+  // §7.5: server-side search/filter/sort/paging on the lines table.
+  const [lines, setLines] = useState(null);
+  const [linesMeta, setLinesMeta] = useState(null);
+  const [linesLoading, setLinesLoading] = useState(false);
+  const [lineQuery, setLineQuery] = useState(DEFAULT_LINE_QUERY);
+  const [searchDraft, setSearchDraft] = useState('');
+  const [linesRefresh, setLinesRefresh] = useState(0); // bump to force a refetch
+
+  const [breakdownLineId, setBreakdownLineId] = useState(null); // §7.3 modal
+  const [showVariance, setShowVariance] = useState(false); // §7.2 panel
+  const [exporting, setExporting] = useState(false); // §7.9 CSV
 
   // Restore the session from a stored token, if there is one.
   useEffect(() => {
@@ -62,6 +79,40 @@ function PayrollCalcPage() {
     loadPeriods();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user]);
+
+  // Debounce the search box so we don't fire a request per keystroke.
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setLineQuery((query) =>
+        query.search === searchDraft ? query : { ...query, search: searchDraft, page: 1 }
+      );
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [searchDraft]);
+
+  // The lines table refetches itself whenever the period, any query knob, or
+  // the refresh counter (bumped after calculate/void/etc.) changes.
+  useEffect(() => {
+    if (!user || !selectedPeriodId) return;
+    let cancelled = false;
+    setLinesLoading(true);
+    fetchPayrollLines(selectedPeriodId, { ...lineQuery, limit: LINES_PER_PAGE }).then((result) => {
+      if (cancelled) return;
+      if (sessionExpired(result)) return;
+      if (result.ok) {
+        setLines(result.data.data.lines || []);
+        setLinesMeta(result.data.meta || null);
+      } else {
+        setLines([]);
+        setLinesMeta(null);
+      }
+      setLinesLoading(false);
+    });
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user, selectedPeriodId, lineQuery, linesRefresh]);
 
   // A 401 means the token expired mid-session — drop back to the login card.
   function sessionExpired(result) {
@@ -86,20 +137,19 @@ function PayrollCalcPage() {
       periods.find((period) => period.status === PAYROLL_STATUS.VALIDATED) || periods[0];
     if (defaultPeriod) {
       setSelectedPeriodId(defaultPeriod.id);
-      loadPayroll(defaultPeriod.id);
+      loadSummary(defaultPeriod.id);
     }
   }
 
-  async function loadPayroll(periodId) {
+  async function loadSummary(periodId) {
     setSummary(null);
-    setLines(null);
-    const [summaryResult, linesResult] = await Promise.all([
-      fetchPayrollSummary(periodId),
-      fetchPayrollLines(periodId),
-    ]);
-    if (sessionExpired(summaryResult)) return;
-    if (summaryResult.ok) setSummary(summaryResult.data.data);
-    if (linesResult.ok) setLines(linesResult.data.data.lines || []);
+    const result = await fetchPayrollSummary(periodId);
+    if (sessionExpired(result)) return;
+    if (result.ok) setSummary(result.data.data);
+  }
+
+  function refreshLines() {
+    setLinesRefresh((count) => count + 1);
   }
 
   function handlePeriodChange(event) {
@@ -107,7 +157,10 @@ function PayrollCalcPage() {
     setSelectedPeriodId(periodId);
     setErrorMessage(null);
     setSuccessMessage(null);
-    loadPayroll(periodId);
+    setShowVariance(false);
+    setSearchDraft('');
+    setLineQuery(DEFAULT_LINE_QUERY); // fresh period, fresh table
+    loadSummary(periodId);
   }
 
   // Shared wrapper for calculate / recalculate / submit: run the action,
@@ -125,7 +178,8 @@ function PayrollCalcPage() {
     } else {
       setSuccessMessage(buildSuccessMessage(result.data.data));
       setDataChangedSinceRun(false);
-      await Promise.all([loadPayroll(selectedPeriodId), loadPeriods(selectedPeriodId)]);
+      refreshLines();
+      await Promise.all([loadSummary(selectedPeriodId), loadPeriods(selectedPeriodId)]);
     }
     setLoading(false);
   }
@@ -172,22 +226,50 @@ function PayrollCalcPage() {
     );
   }
 
+  // §7.5 sort: clicking the active column flips direction, a new column
+  // starts ascending; either way back to page 1.
+  function handleSort(sortKey) {
+    setLineQuery((query) => ({
+      ...query,
+      sort: sortKey,
+      dir: query.sort === sortKey && query.dir === 'asc' ? 'desc' : 'asc',
+      page: 1,
+    }));
+  }
+
+  // §7.9: download the payroll register CSV of the authoritative run.
+  async function handleExport() {
+    setExporting(true);
+    setErrorMessage(null);
+    const result = await downloadPayrollRegister(selectedPeriodId);
+    if (!result.ok && !sessionExpired(result)) {
+      setErrorMessage(result.data?.error?.message || 'CSV export failed.');
+    }
+    setExporting(false);
+  }
+
   function handleLogout() {
     clearAccessToken();
     setUser(null);
     setSummary(null);
     setLines(null);
+    setLinesMeta(null);
     setPayPeriods([]);
   }
 
   const selectedPeriod = payPeriods.find((period) => period.id === selectedPeriodId);
   const periodStatus = selectedPeriod?.status;
   const run = summary?.run;
+  const periodLocked = payrollStatus.uc003Locked.includes(periodStatus);
 
   const canCalculate = periodStatus === PAYROLL_STATUS.VALIDATED;
   const canRecalculate =
     periodStatus === PAYROLL_STATUS.CALCULATED || periodStatus === PAYROLL_STATUS.PENDING_APPROVAL;
   const canSubmit = periodStatus === PAYROLL_STATUS.CALCULATED && user?.role === 'manager';
+
+  const hasFilters = Boolean(lineQuery.search || lineQuery.status);
+  const totalLines = linesMeta?.total ?? 0;
+  const totalPages = Math.max(1, Math.ceil(totalLines / LINES_PER_PAGE));
 
   if (!authChecked) {
     return (
@@ -310,7 +392,17 @@ function PayrollCalcPage() {
             {summary.variance.pctChange}% away from the previous period's (
             {formatMoney(summary.variance.previousNetPayable)}) — over the{' '}
             {summary.variance.thresholdPct}% threshold. Review before submitting — the run itself
-            completed normally.
+            completed normally.{' '}
+            <button
+              type="button"
+              className="login-switch"
+              onClick={() => {
+                setShowVariance(true);
+                setActiveTab('lines');
+              }}
+            >
+              See who moved
+            </button>
           </span>
         </div>
       )}
@@ -414,22 +506,113 @@ function PayrollCalcPage() {
         >
           Rate Sets
         </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={activeTab === 'runs'}
+          className={`tab${activeTab === 'runs' ? ' tab-active' : ''}`}
+          onClick={() => setActiveTab('runs')}
+        >
+          Run History
+        </button>
       </div>
+
+      {activeTab === 'lines' && showVariance && (
+        <div className="card">
+          <div className="card-header">
+            <h2>Per-Staff Comparison</h2>
+            <button type="button" onClick={() => setShowVariance(false)}>
+              Hide
+            </button>
+          </div>
+          <StaffVariancePanel periodId={selectedPeriodId} />
+        </div>
+      )}
 
       {activeTab === 'lines' && (
         <div className="card">
           <div className="card-header">
             <h2>Per-Staff Payroll Lines</h2>
-            {lines && (
-              <span className="card-count">
-                {lines.length} {lines.length === 1 ? 'staff member' : 'staff'}
-              </span>
-            )}
+            <div className="button-row card-actions">
+              {run && !showVariance && (
+                <button type="button" onClick={() => setShowVariance(true)}>
+                  Compare vs previous period
+                </button>
+              )}
+              {run && (
+                <button type="button" onClick={handleExport} disabled={exporting}>
+                  {exporting && <span className="spinner" />}
+                  {exporting ? 'Exporting…' : 'Export CSV'}
+                </button>
+              )}
+              {linesMeta && (
+                <span className="card-count">
+                  {totalLines} {totalLines === 1 ? 'staff member' : 'staff'}
+                  {hasFilters ? ' (filtered)' : ''}
+                </span>
+              )}
+            </div>
           </div>
+
+          {run && (
+            <div className="field-row table-controls">
+              <input
+                type="search"
+                placeholder="Search name or staff ID…"
+                aria-label="Search payroll lines"
+                value={searchDraft}
+                onChange={(event) => setSearchDraft(event.target.value)}
+              />
+              <select
+                aria-label="Filter by line status"
+                value={lineQuery.status}
+                onChange={(event) =>
+                  setLineQuery((query) => ({ ...query, status: event.target.value, page: 1 }))
+                }
+              >
+                <option value="">All statuses</option>
+                <option value="complete">Complete only</option>
+                <option value="incomplete">Incomplete only</option>
+              </select>
+              {linesLoading && <span className="spinner" aria-label="Loading lines" />}
+            </div>
+          )}
+
+          {lines === null ? (
+            <p className="muted">Loading payroll lines…</p>
+          ) : (
           <PayrollLineTable
             lines={lines}
+            filtered={hasFilters}
+            sort={lineQuery.sort}
+            dir={lineQuery.dir}
+            onSort={handleSort}
+            onShowBreakdown={(line) => setBreakdownLineId(line.id)}
             onResolve={user?.role === 'manager' ? handleResolve : undefined}
           />
+          )}
+
+          {totalPages > 1 && (
+            <div className="button-row pagination">
+              <button
+                type="button"
+                disabled={lineQuery.page <= 1 || linesLoading}
+                onClick={() => setLineQuery((query) => ({ ...query, page: query.page - 1 }))}
+              >
+                ← Previous
+              </button>
+              <span className="muted">
+                Page {lineQuery.page} of {totalPages}
+              </span>
+              <button
+                type="button"
+                disabled={lineQuery.page >= totalPages || linesLoading}
+                onClick={() => setLineQuery((query) => ({ ...query, page: query.page + 1 }))}
+              >
+                Next →
+              </button>
+            </div>
+          )}
         </div>
       )}
 
@@ -453,6 +636,22 @@ function PayrollCalcPage() {
       )}
 
       {activeTab === 'rates' && <RateSetsPanel />}
+
+      {activeTab === 'runs' && selectedPeriodId && (
+        <RunHistoryPanel
+          periodId={selectedPeriodId}
+          user={user}
+          locked={periodLocked}
+          onRunVoided={() => {
+            refreshLines();
+            loadSummary(selectedPeriodId);
+          }}
+        />
+      )}
+
+      {breakdownLineId && (
+        <LineBreakdownModal lineId={breakdownLineId} onClose={() => setBreakdownLineId(null)} />
+      )}
     </div>
   );
 }

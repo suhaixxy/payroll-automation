@@ -356,6 +356,82 @@ tbody tr:hover { background: #faf6f4; }
   border-bottom-color: var(--accent);
 }
 
+/* ── Table controls (search / filter / sort / pagination, §7.5) ────── */
+
+.table-controls { align-items: center; }
+
+.table-controls input[type='search'] { flex: 1 1 220px; max-width: 320px; }
+
+.th-sort {
+  border: none;
+  background: transparent;
+  padding: 0;
+  font: inherit;
+  font-size: inherit;
+  text-transform: inherit;
+  letter-spacing: inherit;
+  color: inherit;
+  font-weight: inherit;
+  cursor: pointer;
+}
+
+.th-sort:hover { color: var(--accent); border: none; }
+
+.th-sort-arrow { color: var(--accent); }
+
+.numeric .th-sort { text-align: right; }
+
+.row-action { padding: 0.25rem 0.6rem; font-size: 0.84rem; white-space: nowrap; }
+
+.pagination { justify-content: center; margin-top: 0.8rem; }
+
+.card-actions { margin: 0; }
+
+/* ── Breakdown modal (§7.3) ────────────────────────────────────────── */
+
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(35, 33, 37, 0.45);
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 3rem 1rem;
+  z-index: 40;
+  overflow-y: auto;
+}
+
+.modal {
+  background: var(--surface);
+  border-radius: 10px;
+  box-shadow: rgba(35, 33, 37, 0.25) 0 12px 40px;
+  padding: 1.2rem 1.4rem;
+  width: 100%;
+  max-width: 620px;
+}
+
+.modal-provenance { margin-top: -0.3rem; font-size: 0.86rem; }
+
+.breakdown-table td { border-bottom: 1px dashed var(--border); }
+
+.breakdown-subtotal td {
+  font-weight: 600;
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+}
+
+.breakdown-total td {
+  font-weight: 700;
+  font-size: 1.02rem;
+  border-top: 2px solid var(--text);
+  border-bottom: none;
+}
+
+.modal-footnote { font-size: 0.84rem; margin-bottom: 0; }
+
+/* §7.2 variance panel: non-zero deltas stand out */
+.delta-nonzero { font-weight: 600; }
+
 /* ── States ────────────────────────────────────────────────────────── */
 
 .empty-state {
