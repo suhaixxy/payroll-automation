@@ -8,6 +8,7 @@ const express = require('express');
 const uc003Controller = require('../controllers/uc003Controller');
 const adjustmentController = require('../controllers/adjustmentController');
 const performanceInputController = require('../controllers/performanceInputController');
+const rateSetController = require('../controllers/rateSetController');
 const { requireAuth, requireRole } = require('../middleware/auth');
 
 const router = express.Router();
@@ -71,5 +72,12 @@ router.delete(
   requireRole('manager'),
   performanceInputController.remove
 );
+
+// Statutory rate sets (§6). Reads: any authenticated user. POST creates a
+// NEW VERSION (manager only) and closes the current one — no update or
+// delete: a rate set is superseded, never edited.
+router.get('/rate-sets', requireAuth, rateSetController.list);
+router.get('/rate-sets/:id', requireAuth, rateSetController.detail);
+router.post('/rate-sets', requireAuth, requireRole('manager'), rateSetController.create);
 
 module.exports = router;
