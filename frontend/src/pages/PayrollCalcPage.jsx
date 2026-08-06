@@ -12,6 +12,7 @@ import {
 } from '../api/client';
 import PayrollLineTable, { formatMoney } from '../components/PayrollLineTable';
 import AdjustmentsPanel from '../components/AdjustmentsPanel';
+import PerformanceInputsPanel from '../components/PerformanceInputsPanel';
 import LoginPanel from '../components/LoginPanel';
 // Shared status contract (UC-003 guide §5.1) — same file the backend uses.
 import payrollStatus from '../../../shared/payrollStatus.json';
@@ -34,8 +35,10 @@ function PayrollCalcPage() {
   const [loading, setLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState(null);
   const [successMessage, setSuccessMessage] = useState(null);
-  const [activeTab, setActiveTab] = useState('lines'); // 'lines' | 'adjustments'
+  const [activeTab, setActiveTab] = useState('lines'); // 'lines' | 'adjustments' | 'inputs'
   const [dataChangedSinceRun, setDataChangedSinceRun] = useState(false);
+  // §5.8 resolve loop: which staff member's missing input we're fixing.
+  const [resolveStaffId, setResolveStaffId] = useState(null);
 
   // Restore the session from a stored token, if there is one.
   useEffect(() => {
@@ -145,6 +148,28 @@ function PayrollCalcPage() {
       submitForApproval,
       () => 'Submitted — the period is now pending approval (UC-004).'
     );
+
+  // §5.8: Resolve on an incomplete line jumps to the Performance Inputs tab
+  // with the create form pre-filled for that staff member.
+  function handleResolve(line) {
+    setResolveStaffId(line.staffId);
+    setActiveTab('inputs');
+  }
+
+  // After the resolving input is saved: recalculate so the line turns
+  // complete, then land back on the lines tab showing the result.
+  async function handleResolvedSaved() {
+    if (!resolveStaffId) {
+      setDataChangedSinceRun(true);
+      return;
+    }
+    setResolveStaffId(null);
+    setActiveTab('lines');
+    await runAction(
+      periodStatus === PAYROLL_STATUS.VALIDATED ? calculatePayroll : recalculatePayroll,
+      (data) => `Input saved and recalculated as run #${data.run.runNumber} — check the line below.`
+    );
+  }
 
   function handleLogout() {
     clearAccessToken();
@@ -367,6 +392,18 @@ function PayrollCalcPage() {
         >
           Adjustments
         </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={activeTab === 'inputs'}
+          className={`tab${activeTab === 'inputs' ? ' tab-active' : ''}`}
+          onClick={() => {
+            setResolveStaffId(null); // manual visit, not a resolve jump
+            setActiveTab('inputs');
+          }}
+        >
+          Performance Inputs
+        </button>
       </div>
 
       {activeTab === 'lines' && (
@@ -379,7 +416,10 @@ function PayrollCalcPage() {
               </span>
             )}
           </div>
-          <PayrollLineTable lines={lines} />
+          <PayrollLineTable
+            lines={lines}
+            onResolve={user?.role === 'manager' ? handleResolve : undefined}
+          />
         </div>
       )}
 
@@ -389,6 +429,16 @@ function PayrollCalcPage() {
           periodStatus={periodStatus}
           user={user}
           onChanged={() => setDataChangedSinceRun(true)}
+        />
+      )}
+
+      {activeTab === 'inputs' && selectedPeriodId && (
+        <PerformanceInputsPanel
+          periodId={selectedPeriodId}
+          periodStatus={periodStatus}
+          user={user}
+          resolveStaffId={resolveStaffId}
+          onSaved={handleResolvedSaved}
         />
       )}
     </div>

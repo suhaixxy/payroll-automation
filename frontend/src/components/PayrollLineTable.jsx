@@ -10,7 +10,12 @@ export function formatMoney(value) {
   });
 }
 
-function PayrollLineTable({ lines }) {
+// Reason codes the UI can act on today: a missing performance input is
+// resolved right here via the Resolve button (§5.8). MISSING_PAY_RATE waits
+// on the pay-rate ownership decision (§3.3); the hours codes are UC-002's.
+const RESOLVABLE = ['MISSING_PERFORMANCE_INPUT'];
+
+function PayrollLineTable({ lines, onResolve }) {
   if (!lines || lines.length === 0) {
     return (
       <p className="empty-state">
@@ -77,6 +82,15 @@ function PayrollLineTable({ lines }) {
                     {reason.message}
                   </div>
                 ))}
+                {onResolve &&
+                  line.lineStatus === 'incomplete' &&
+                  (line.incompleteReasons || []).some((reason) => RESOLVABLE.includes(reason.code)) && (
+                    <div>
+                      <button type="button" onClick={() => onResolve(line)}>
+                        Resolve
+                      </button>
+                    </div>
+                  )}
               </td>
             </tr>
           ))}
