@@ -1,12 +1,11 @@
-// UC-003 demo data, seeded at server start (same pattern as
-// payPeriodService.ensurePayPeriodsSeeded — idempotent, safe to run every
+// UC-003 demo data, seeded at server start (idempotent, safe to run every
 // boot). Two jobs:
 //
-// 1. Reference data UC-003 needs: staff birthdates (CPF age bands),
-//    two full-timers, one non-CPF-eligible person, pay rates and an
-//    incentive scheme. Deliberate gaps for demoing the error flows:
-//    S005 has NO pay rate (flow 2a) and S006 is missing a REQUIRED
-//    performance input (flow 3a).
+// 1. Reference data UC-003 needs on the shared staff rows: birthdates (CPF
+//    age bands), one full-timer flip, and hourly pay rates for the
+//    part-timers. S003 stays WITHOUT a performance input on purpose — that
+//    is the missing-input incomplete-line demo (resolve loop, guide §5.8).
+//    S001's performance input comes from db/seeds/030_uc003_seed.sql.
 //
 // 2. One past pay period marked 'validated' with FROZEN timesheet rows —
 //    UC-002 (which normally produces the frozen snapshot) isn't built yet,
@@ -15,66 +14,24 @@
 //    UC-002 is live or the demo was already seeded).
 
 const { pool } = require('../config/database');
-const { PayRate, IncentiveScheme, PerformanceInput } = require('../models');
+const { PayRate } = require('../models');
 const auditService = require('./auditService');
 
-// Birthdates chosen to land people in different CPF age bands (as of 2026):
-// 30, 57, 36, 63, 23, 40 and 27 years old.
+// Birthdates chosen to land people in different CPF age bands (as of 2026).
+// S004+ entries only apply if the team adds those staff to the shared seed.
 const STAFF_DETAILS = [
-  { externalRef: 'S001', dateOfBirth: '1996-04-12' },
+  { externalRef: 'S001', dateOfBirth: '1996-04-12', employmentType: 'full_time' },
   { externalRef: 'S002', dateOfBirth: '1968-09-30' }, // >55–60 band
   { externalRef: 'S003', dateOfBirth: '1990-02-20', employmentType: 'full_time' },
-  { externalRef: 'S004', dateOfBirth: '1963-05-14' }, // >60–65 band
-  { externalRef: 'S005', dateOfBirth: '2002-11-05' }, // no pay rate on purpose (flow 2a)
-  { externalRef: 'S006', dateOfBirth: '1985-08-08', employmentType: 'full_time' }, // missing required input (flow 3a)
-  { externalRef: 'S007', dateOfBirth: '1999-01-25', cpfEligible: false }, // non-CPF-eligible demo
 ];
 
-// hourlyRateCents per part-timer. S007's $15.55 exists to demo exact-cents
-// rounding (12.1h x $15.55 style cases).
-const PAY_RATES = [
-  { externalRef: 'S001', hourlyRateCents: 1650 },
-  { externalRef: 'S002', hourlyRateCents: 1800 },
-  { externalRef: 'S004', hourlyRateCents: 1720 },
-  { externalRef: 'S007', hourlyRateCents: 1555 },
-];
+// hourlyRateCents per part-timer.
+const PAY_RATES = [{ externalRef: 'S002', hourlyRateCents: 1800 }];
 
-const DEMO_SCHEME = {
-  name: 'FY2026 Full-Timer Incentive',
-  ruleDefinition: {
-    requiredMetrics: ['sessions'],
-    metrics: {
-      sessions: { type: 'per_unit', rateCents: 1500 }, // $15 per session delivered
-      enrolments: { type: 'per_unit', rateCents: 2500 }, // $25 per enrolment
-      sales: { type: 'percentage', basisPoints: 200 }, // 2% of sales (cents)
-      kpi: {
-        type: 'tiered',
-        tiers: [
-          { min: 90, bonusCents: 50000 }, // KPI >= 90 → $500
-          { min: 80, bonusCents: 25000 }, // KPI >= 80 → $250
-        ],
-      },
-    },
-  },
-};
-
-// d = days after the period's start date; ot/ph are slices of total.
+// d = days after the period's start date (kept for documentation; the
+// timesheet table has no per-shift date column in this repo).
 const DEMO_SHIFTS = [
-  { externalRef: 'S001', shifts: [{ d: 0, total: 8 }, { d: 1, total: 8 }, { d: 2, total: 10, ot: 2 }, { d: 3, total: 8 }] },
-  { externalRef: 'S002', shifts: [{ d: 0, total: 9 }, { d: 2, total: 9 }, { d: 7, total: 8, ph: 8 }] },
-  { externalRef: 'S004', shifts: [{ d: 0, total: 6 }, { d: 1, total: 6 }, { d: 3, total: 6 }, { d: 4, total: 6 }, { d: 8, total: 6 }] },
-  { externalRef: 'S005', shifts: [{ d: 1, total: 8 }, { d: 2, total: 8 }] },
-  { externalRef: 'S007', shifts: [{ d: 0, total: 7.5 }, { d: 3, total: 7.5 }, { d: 5, total: 7.5 }, { d: 9, total: 7.5 }] },
-];
-
-const DEMO_PERFORMANCE_INPUTS = [
-  { externalRef: 'S003', metricType: 'sessions', metricValue: 24 },
-  { externalRef: 'S003', metricType: 'enrolments', metricValue: 6 },
-  { externalRef: 'S003', metricType: 'sales', metricValue: 1250000 }, // $12,500 in cents
-  { externalRef: 'S003', metricType: 'kpi', metricValue: 92 },
-  // S006 has an enrolments figure but NOT the required 'sessions' one —
-  // that's the flow-3a incomplete-line demo.
-  { externalRef: 'S006', metricType: 'enrolments', metricValue: 3 },
+  { externalRef: 'S002', shifts: [{ total: 9 }, { total: 9 }, { total: 8, ph: 8 }] },
 ];
 
 async function staffIdByExternalRef() {
@@ -109,16 +66,9 @@ async function seedPayRates(idByRef) {
     if (!staffId) continue;
     await PayRate.findOrCreate({
       where: { staffId, effectiveFrom: '2026-01-01' },
-      defaults: { hourlyRateCents: rate.hourlyRateCents, otMultiplier: 1.5, phMultiplier: 2.0 },
+      defaults: { hourlyRateCents: rate.hourlyRateCents },
     });
   }
-}
-
-async function seedIncentiveScheme() {
-  await IncentiveScheme.findOrCreate({
-    where: { name: DEMO_SCHEME.name },
-    defaults: { ruleDefinition: DEMO_SCHEME.ruleDefinition, active: true },
-  });
 }
 
 // Fakes UC-002's output once: a past period flipped to 'validated' with
@@ -146,9 +96,6 @@ async function seedDemoValidatedPeriod(idByRef) {
     const staffId = idByRef.get(staffShifts.externalRef);
     if (!staffId) continue;
     for (const shift of staffShifts.shifts) {
-      // The old repo's timesheet had shift_date/match_method columns; this
-      // repo's timesheet (001) does not, and the engine only SUMs rows per
-      // staff, so one row per shift without a date is equivalent.
       await pool.query(
         `INSERT INTO timesheet
            (pay_period_id, staff_id, total_hours, ot_hours, ph_hours,
@@ -157,15 +104,6 @@ async function seedDemoValidatedPeriod(idByRef) {
         [period.id, staffId, shift.total, shift.ot || 0, shift.ph || 0]
       );
     }
-  }
-
-  for (const input of DEMO_PERFORMANCE_INPUTS) {
-    const staffId = idByRef.get(input.externalRef);
-    if (!staffId) continue;
-    await PerformanceInput.findOrCreate({
-      where: { payPeriodId: period.id, staffId, metricType: input.metricType },
-      defaults: { metricValue: input.metricValue },
-    });
   }
 
   await pool.query(
@@ -186,7 +124,6 @@ async function ensureUc003DemoData() {
   await seedStaffDetails();
   const idByRef = await staffIdByExternalRef();
   await seedPayRates(idByRef);
-  await seedIncentiveScheme();
   await seedDemoValidatedPeriod(idByRef);
 }
 
