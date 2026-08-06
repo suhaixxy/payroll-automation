@@ -78,7 +78,7 @@ async function apiGet(path) {
   return response.json();
 }
 
-async function apiPost(path, body) {
+async function apiPost(path, body, { allowStatuses = [] } = {}) {
   const headers = {
     "Content-Type": "application/json",
   };
@@ -95,11 +95,13 @@ async function apiPost(path, body) {
     body: JSON.stringify(body),
   });
 
-  if (!response.ok) {
+  const payload = await response.json();
+
+  if (!response.ok && !allowStatuses.includes(response.status)) {
     throw new Error(`API POST ${path} failed: ${response.status}`);
   }
 
-  return response.json();
+  return payload;
 }
 
 export {
