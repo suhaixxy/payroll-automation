@@ -36,6 +36,11 @@ const PayrollLine = sequelize.define(
       defaultValue: 'complete',
     },
     notes: { type: DataTypes.TEXT, allowNull: true },
+    // Ordered human-readable derivation steps (guide §5.7) — what makes the
+    // calculation auditable.
+    calcBreakdown: { type: DataTypes.JSONB, allowNull: true },
+    // [{code, message}] when incomplete (guide §5.8), else null.
+    incompleteReasons: { type: DataTypes.JSONB, allowNull: true },
   },
   {
     tableName: 'payroll_line',

@@ -5,47 +5,36 @@
 // period to pending_approval. That makes a re-run (after a UC-004
 // rejection) idempotent — it can never double-count or half-finish.
 //
-// Money: integer cents everywhere. Hours and multipliers come out of
-// NUMERIC columns as strings, so they're converted to integer hundredths
-// before any maths — the only floats ever touched are exact /100 scaling.
-// Rounding: half-up at the cent (Math.round) at each pay component
-// (regular, OT, PH, each incentive rule); CPF has its own official
-// rounding inside statutoryEngine.
+// Phase 2 split of responsibilities:
+//   rateSetService     — loads the statutory rate set effective for the period
+//   calculationEngine  — pure per-line maths (CPF, SDL, rounding, breakdown)
+//   this module        — data loading, persistence, totals, variance, audit
+//
+// Money: integer cents everywhere (NUMERIC columns arrive as strings and are
+// converted once at load). SDL is EMPLOYER-BORNE (guide §5.6): it is not
+// part of employee deductions and never reduces net pay.
 //
 // Shared tables (pay_period, staff, timesheet) are read with raw SQL
 // through the SAME Sequelize connection/transaction, so UC-003 never
 // defines models for tables it doesn't own.
 
 const { Op, QueryTypes } = require('sequelize');
-const {
-  sequelize,
-  PayrollLine,
-  PayRate,
-  IncentiveScheme,
-  PerformanceInput,
-} = require('../models');
-const statutoryEngine = require('./statutoryEngine');
-const incentiveEngine = require('./incentiveEngine');
+const { sequelize, PayrollLine, PayRate } = require('../models');
+const calculationEngine = require('./calculationEngine');
+const rateSetService = require('./rateSetService');
 const auditService = require('./auditService');
 // Shared status contract (guide §5.1) — never hardcode status strings.
-const { PAYROLL_STATUS } = require('../../../shared/payrollStatus.mjs');
+const { statuses: PAYROLL_STATUS } = require('../../../shared/payrollStatus.json');
 
 // Warning flow 5a: if the period's derived gross total differs from the
 // previous period's by more than this fraction, the run still completes but
 // returns varianceWarning: true and writes an audit entry. Team-tunable.
 const VARIANCE_THRESHOLD = 0.2; // 20%
 
-// NUMERIC(6,2) hours arrive as strings like "10.50" — turn them into
-// integer hundredths-of-an-hour so all later maths is integer-exact.
+// NUMERIC(6,2)/(10,2) values arrive as strings like "10.50" — turn them into
+// integer hundredths so all later maths is integer-exact.
 function toHundredths(numericString) {
   return Math.round(Number(numericString || 0) * 100);
-}
-
-// hours (hundredths) x rate (cents) x multiplier (hundredths, 150 = 1.5x),
-// rounded half-up at the cent. Pure integer maths until the final division:
-// the two /100 scale factors (hours, multiplier) combine into one /10000.
-function payComponentCents(hoursHundredths, rateCents, multiplierHundredths) {
-  return Math.round((hoursHundredths * rateCents * multiplierHundredths) / 10000);
 }
 
 async function loadPeriod(payPeriodId, transaction) {
@@ -62,15 +51,16 @@ async function loadPeriod(payPeriodId, transaction) {
 
 /**
  * Derived totals for a period — always a SUM over its COMPLETE payroll
- * lines, never a stored figure. grossCents includes incentive pay.
+ * lines, never a stored figure. Employee deductions are CPF (employee) ONLY;
+ * SDL and employer CPF sit in employer cost (guide §5.6).
  * @param {string} payPeriodId
  * @param {object} [transaction]
- * @returns {Promise<{grossCents: number, deductionsCents: number, netCents: number, completeCount: number}>}
  */
 async function derivePeriodTotals(payPeriodId, transaction) {
   const rows = await sequelize.query(
     `SELECT COALESCE(SUM(gross_pay_cents + incentive_cents), 0) AS "grossCents",
-            COALESCE(SUM(cpf_employee_cents + sdl_cents + other_deductions_cents), 0) AS "deductionsCents",
+            COALESCE(SUM(cpf_employee_cents), 0) AS "deductionsCents",
+            COALESCE(SUM(cpf_employer_cents + sdl_cents), 0) AS "employerCostCents",
             COALESCE(SUM(net_pay_cents), 0) AS "netCents",
             COUNT(*) AS "completeCount"
      FROM payroll_line
@@ -81,6 +71,7 @@ async function derivePeriodTotals(payPeriodId, transaction) {
   return {
     grossCents: Number(row.grossCents),
     deductionsCents: Number(row.deductionsCents),
+    employerCostCents: Number(row.employerCostCents),
     netCents: Number(row.netCents),
     completeCount: Number(row.completeCount),
   };
@@ -123,111 +114,25 @@ async function checkVariance(period, currentGrossCents) {
   };
 }
 
-// Builds one staff member's payroll line. Anything that blocks a correct
-// figure (error flows 2a/3a) marks the line incomplete with a human note
-// instead of failing the whole run.
-function buildLine({ staff, hours, rate, scheme, inputs, period }) {
-  const notes = [];
-  let grossPayCents = 0;
-  let incentiveCents = 0;
-
-  if (staff.employmentType === 'part_time') {
-    // No frozen hours is NOT an error — they just didn't work this period.
-    if (hours && hours.totalHundredths > 0) {
-      if (!rate) {
-        notes.push('No pay rate configured — gross pay could not be calculated.');
-      } else {
-        // total_hours is the whole shift; ot/ph are the classified slices of
-        // it, so the plain-rate portion is what's left after removing them.
-        const regularHundredths = Math.max(
-          hours.totalHundredths - hours.otHundredths - hours.phHundredths,
-          0
-        );
-        grossPayCents =
-          payComponentCents(regularHundredths, rate.hourlyRateCents, 100) +
-          payComponentCents(hours.otHundredths, rate.hourlyRateCents, rate.otMultiplierHundredths) +
-          payComponentCents(hours.phHundredths, rate.hourlyRateCents, rate.phMultiplierHundredths);
-      }
-    }
-  } else {
-    // Full-timers are paid incentives from performance inputs, never hours.
-    // (Their base salary is handled outside this system in this iteration.)
-    if (!scheme) {
-      notes.push('No active incentive scheme — incentive could not be calculated.');
-    } else {
-      const result = incentiveEngine.calculateIncentive({ performanceInputs: inputs, scheme });
-      if (result.missingMetrics.length > 0) {
-        notes.push(`Missing required performance input(s): ${result.missingMetrics.join(', ')}.`);
-      } else {
-        incentiveCents = result.incentiveCents;
-      }
-    }
-  }
-
-  // CPF and SDL apply to total wages: hourly gross plus incentives.
-  const wageBaseCents = grossPayCents + incentiveCents;
-
-  let cpf = { employeeCents: 0, employerCents: 0 };
-  if (staff.cpfEligible && wageBaseCents > 0) {
-    if (!staff.dateOfBirth) {
-      notes.push('CPF-eligible but no date of birth on file — CPF could not be calculated.');
-    } else {
-      cpf = statutoryEngine.calculateCpf({
-        wageBaseCents,
-        // Age band as at the period's end date (see statutoryEngine notes).
-        age: statutoryEngine.ageInYears(staff.dateOfBirth, period.endDate),
-        cpfEligible: true,
-      });
-    }
-  }
-
-  const sdlCents = statutoryEngine.calculateSdl({ wageBaseCents });
-  const otherDeductionsCents = 0; // no deduction source exists in this iteration
-
-  // Net formula from the UC-003 spec: gross + incentive − CPF(employee) −
-  // SDL − other deductions. (Flagged to the team: in the real world SDL is
-  // an employer levy, not an employee deduction — kept as specified.)
-  const netPayCents = wageBaseCents - cpf.employeeCents - sdlCents - otherDeductionsCents;
-
-  return {
-    record: {
-      payPeriodId: period.id,
-      staffId: staff.id,
-      grossPayCents,
-      incentiveCents,
-      cpfEmployeeCents: cpf.employeeCents,
-      cpfEmployerCents: cpf.employerCents,
-      sdlCents,
-      otherDeductionsCents,
-      netPayCents,
-      lineStatus: notes.length > 0 ? 'incomplete' : 'complete',
-      notes: notes.length > 0 ? notes.join(' ') : null,
-    },
-    display: {
-      staffName: staff.fullName,
-      externalRef: staff.externalRef,
-      employmentType: staff.employmentType,
-    },
-  };
-}
-
 /**
  * Runs the full payroll calculation for a validated pay period.
  * @param {string} payPeriodId
  * @param {string} actor - who triggered the run (for the audit log).
- * @returns {Promise<object>} { error } for the controller's 404/409 cases,
- *   otherwise { data } matching the POST /payroll/calculate response shape.
+ * @returns {Promise<object>} { error } for the controller's 404/409/422
+ *   cases, otherwise { data } matching the POST /payroll/calculate response.
  */
 async function calculatePayroll(payPeriodId, actor) {
   const period = await loadPeriod(payPeriodId);
   if (!period) return { error: 'NOT_FOUND' };
-  // 409 guard: only a UC-002-validated period may be calculated. A period
-  // that already finished calculating sits at pending_approval, so an
-  // accidental second POST lands here and nothing is written — recalculating
-  // is only possible after UC-004 rejects the period back to validated.
+  // 409 guard: only a UC-002-validated period may be calculated.
   if (period.status !== PAYROLL_STATUS.VALIDATED) {
     return { error: 'NOT_VALIDATED', currentStatus: period.status };
   }
+
+  // Phase 2.1: every statutory figure comes from the rate set effective at
+  // the period's end date — nothing is read from hardcoded config anymore.
+  const rateSet = await rateSetService.getRateSetForDate(period.endDate);
+  if (!rateSet) return { error: 'NO_RATE_SET' };
 
   const built = await sequelize.transaction(async (transaction) => {
     // Re-run safety (UC-004 rejection loop): wipe this period's lines first.
@@ -246,35 +151,33 @@ async function calculatePayroll(payPeriodId, actor) {
       { type: QueryTypes.SELECT, transaction }
     );
 
-    // The frozen UC-002 snapshot: only frozen, matched rows count. Live
-    // (unfrozen) roster data is never used — that's the whole point of the
-    // snapshot.
+    // The frozen UC-002 snapshot, row by row (not pre-summed) so the engine
+    // can validate each shift before trusting it (INVALID_HOURS).
     const hourRows = await sequelize.query(
       `SELECT staff_id AS "staffId",
-              SUM(total_hours) AS "totalHours",
-              SUM(ot_hours) AS "otHours",
-              SUM(ph_hours) AS "phHours"
+              total_hours AS "totalHours",
+              ot_hours AS "otHours",
+              ph_hours AS "phHours"
        FROM timesheet
        WHERE pay_period_id = :payPeriodId
          AND is_frozen = true
          AND match_status = 'matched'
-         AND staff_id IS NOT NULL
-       GROUP BY staff_id`,
+         AND staff_id IS NOT NULL`,
       { replacements: { payPeriodId }, type: QueryTypes.SELECT, transaction }
     );
-    const hoursByStaff = new Map(
-      hourRows.map((row) => [
-        row.staffId,
-        {
-          totalHundredths: toHundredths(row.totalHours),
-          otHundredths: toHundredths(row.otHours),
-          phHundredths: toHundredths(row.phHours),
-        },
-      ])
-    );
+    const hoursByStaff = new Map();
+    for (const row of hourRows) {
+      if (!hoursByStaff.has(row.staffId)) hoursByStaff.set(row.staffId, []);
+      hoursByStaff.get(row.staffId).push({
+        totalHundredths: toHundredths(row.totalHours),
+        otHundredths: toHundredths(row.otHours),
+        phHundredths: toHundredths(row.phHours),
+      });
+    }
 
     // Newest rate that was already effective when the period started, per
     // staff member — historic periods recalculate with their historic rate.
+    // (OT/PH multipliers come from the rate SET, not the pay rate — §5.2.)
     const rateRows = await PayRate.findAll({
       where: { effectiveFrom: { [Op.lte]: period.startDate } },
       order: [['effectiveFrom', 'DESC']],
@@ -283,37 +186,67 @@ async function calculatePayroll(payPeriodId, actor) {
     const rateByStaff = new Map();
     for (const rate of rateRows) {
       if (!rateByStaff.has(rate.staffId)) {
-        rateByStaff.set(rate.staffId, {
-          hourlyRateCents: rate.hourlyRateCents,
-          otMultiplierHundredths: Math.round(Number(rate.otMultiplier) * 100),
-          phMultiplierHundredths: Math.round(Number(rate.phMultiplier) * 100),
-        });
+        rateByStaff.set(rate.staffId, { hourlyRateCents: rate.hourlyRateCents });
       }
     }
 
-    const scheme = await IncentiveScheme.findOne({
-      where: { active: true },
-      order: [['createdAt', 'DESC']],
-      transaction,
-    });
-
-    const inputRows = await PerformanceInput.findAll({ where: { payPeriodId }, transaction });
+    // §5.3: performance inputs from the guide-model table (quantity ×
+    // unit_value), soft-deleted rows excluded.
+    const inputRows = await sequelize.query(
+      `SELECT staff_id AS "staffId",
+              input_type AS "inputType",
+              quantity,
+              unit_value AS "unitValue"
+       FROM performance_inputs
+       WHERE period_id = :payPeriodId AND deleted_at IS NULL`,
+      { replacements: { payPeriodId }, type: QueryTypes.SELECT, transaction }
+    );
     const inputsByStaff = new Map();
     for (const input of inputRows) {
       if (!inputsByStaff.has(input.staffId)) inputsByStaff.set(input.staffId, []);
-      inputsByStaff.get(input.staffId).push(input);
+      inputsByStaff.get(input.staffId).push({
+        inputType: input.inputType,
+        quantityHundredths: toHundredths(input.quantity),
+        unitValueCents: toHundredths(input.unitValue),
+      });
     }
 
-    const lines = staffRows.map((staff) =>
-      buildLine({
+    const lines = staffRows.map((staff) => {
+      const result = calculationEngine.calculateLine({
         staff,
-        hours: hoursByStaff.get(staff.id),
-        rate: rateByStaff.get(staff.id),
-        scheme,
-        inputs: inputsByStaff.get(staff.id) || [],
-        period,
-      })
-    );
+        hourRows: hoursByStaff.get(staff.id) || [],
+        rate: rateByStaff.get(staff.id) || null,
+        performanceInputs: inputsByStaff.get(staff.id) || [],
+        rateSet,
+        periodEndDate: period.endDate,
+      });
+      return {
+        record: {
+          payPeriodId: period.id,
+          staffId: staff.id,
+          grossPayCents: result.grossFromHoursCents,
+          incentiveCents: result.incentiveCents,
+          cpfEmployeeCents: result.cpfEmployeeCents,
+          cpfEmployerCents: result.cpfEmployerCents,
+          sdlCents: result.sdlCents,
+          otherDeductionsCents: 0,
+          netPayCents: result.netPayCents,
+          lineStatus: result.lineStatus,
+          notes:
+            result.incompleteReasons.length > 0
+              ? result.incompleteReasons.map((reason) => reason.message).join(' ')
+              : null,
+          calcBreakdown: result.breakdown,
+          incompleteReasons:
+            result.incompleteReasons.length > 0 ? result.incompleteReasons : null,
+        },
+        display: {
+          staffName: staff.fullName,
+          externalRef: staff.externalRef,
+          employmentType: staff.employmentType,
+        },
+      };
+    });
 
     await PayrollLine.bulkCreate(
       lines.map((line) => line.record),
@@ -345,11 +278,13 @@ async function calculatePayroll(payPeriodId, actor) {
     action: 'payroll_calculated',
     actor,
     detail: {
+      rateSetId: rateSet.id,
+      rateSetVersion: rateSet.versionLabel,
       lineCount: built.length,
       incompleteCount: incomplete.length,
       totals,
       varianceWarning,
-      statusChange: 'validated -> pending_approval',
+      statusChange: `${PAYROLL_STATUS.VALIDATED} -> ${PAYROLL_STATUS.PENDING_APPROVAL}`,
     },
   });
   if (incomplete.length > 0) {
@@ -361,7 +296,7 @@ async function calculatePayroll(payPeriodId, actor) {
       detail: {
         staff: incomplete.map((line) => ({
           name: line.display.staffName,
-          notes: line.record.notes,
+          reasons: line.record.incompleteReasons,
         })),
       },
     });
@@ -380,9 +315,11 @@ async function calculatePayroll(payPeriodId, actor) {
     data: {
       payPeriodId,
       status: PAYROLL_STATUS.PENDING_APPROVAL,
+      rateSet: { id: rateSet.id, versionLabel: rateSet.versionLabel },
       totals: {
         grossCents: totals.grossCents,
         deductionsCents: totals.deductionsCents,
+        employerCostCents: totals.employerCostCents,
         netCents: totals.netCents,
       },
       lineCount: built.length,
@@ -409,6 +346,7 @@ async function getPayrollForPeriod(payPeriodId) {
             s.full_name AS "staffName",
             s.external_ref AS "externalRef",
             s.employment_type AS "employmentType",
+            s.cpf_eligible AS "cpfEligible",
             pl.gross_pay_cents AS "grossPayCents",
             pl.incentive_cents AS "incentiveCents",
             pl.cpf_employee_cents AS "cpfEmployeeCents",
@@ -417,7 +355,9 @@ async function getPayrollForPeriod(payPeriodId) {
             pl.other_deductions_cents AS "otherDeductionsCents",
             pl.net_pay_cents AS "netPayCents",
             pl.line_status AS "lineStatus",
-            pl.notes
+            pl.notes,
+            pl.calc_breakdown AS "calcBreakdown",
+            pl.incomplete_reasons AS "incompleteReasons"
      FROM payroll_line pl
      JOIN staff s ON s.id = pl.staff_id
      WHERE pl.pay_period_id = :payPeriodId
@@ -435,6 +375,7 @@ async function getPayrollForPeriod(payPeriodId) {
       totals: {
         grossCents: totals.grossCents,
         deductionsCents: totals.deductionsCents,
+        employerCostCents: totals.employerCostCents,
         netCents: totals.netCents,
       },
       lineCount: lines.length,
@@ -450,7 +391,6 @@ async function getPayrollForPeriod(payPeriodId) {
  * All pay periods with their status — the UC-001 pay-periods API doesn't
  * expose status, and the PayrollCalc page needs it to show which periods
  * are actually 'validated' and ready to calculate. Read-only.
- * @returns {Promise<Array<{id: string, startDate: string, endDate: string, status: string}>>}
  */
 async function listPeriodsWithStatus() {
   return sequelize.query(
@@ -470,5 +410,4 @@ module.exports = {
   derivePeriodTotals,
   listPeriodsWithStatus,
   VARIANCE_THRESHOLD,
-  payComponentCents, // exported for the rounding unit tests
 };

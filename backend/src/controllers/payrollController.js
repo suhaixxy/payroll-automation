@@ -33,6 +33,12 @@ async function calculate(req, res, next) {
         message: `Pay period is '${result.currentStatus}', not 'validated' — nothing was calculated.`,
       });
     }
+    if (result.error === 'NO_RATE_SET') {
+      return res.status(422).json({
+        error: 'NO_RATE_SET',
+        message: 'No statutory rate set covers this period — create one before calculating.',
+      });
+    }
 
     res.status(200).json(result.data);
   } catch (err) {
