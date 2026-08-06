@@ -21,12 +21,19 @@ VALUES ('00000000-0000-4000-8000-000000000001', 'System (seed)', 'system@payroll
 ON CONFLICT (email) DO NOTHING;
 
 -- ── Statutory rate set ──────────────────────────────────────────────────
--- CPF figures verified against CPF Board tables effective 1 Jan 2026 (see
--- backend/src/config/statutory.js for source URLs): OW ceiling $8,000/month,
--- SDL 0.25% on the first $4,500 (min $2.00, max $11.25).
--- TODO(verify): OT 1.5 and PH 2.0 multipliers against MOM guidance.
--- TODO(verify): min_wage_threshold — the $500–$750 phase-in band is
--- simplified to "no employee CPF below $500".
+-- ALL FIGURES VERIFIED (phase 6.4, checked 2026-08-06):
+-- * CPF rates + $8,000 OW ceiling: CPF Board, "CPF Contribution Rate Table
+--   from 1 January 2026" — cpf.gov.sg/employer/employer-obligations/
+--   how-much-cpf-contributions-to-pay (see also config/statutory.js).
+-- * SDL 0.25% on the first $4,500, min $2.00 / max $11.25: SkillsFuture SG
+--   via cpf.gov.sg/employer/employer-obligations/skills-development-levy.
+-- * OT 1.5×: Employment Act Part IV — at least 1.5× the basic hourly rate
+--   (mom.gov.sg, overtime pay). PH 2.0×: working a public holiday earns an
+--   extra day's pay on top of basic pay (mom.gov.sg, public holiday pay).
+-- * min_wage_threshold $500: no employee CPF share on total wages <= $500
+--   (employer still contributes). DOCUMENTED SIMPLIFICATION: the official
+--   $500–$750 phased-in employee rates are out of scope — full rates apply
+--   from $500 (cpf.gov.sg, "How much CPF contributions to pay").
 INSERT INTO statutory_rate_sets
   (id, version_label, effective_from, effective_to,
    sdl_rate, sdl_min, sdl_max, sdl_wage_cap,
