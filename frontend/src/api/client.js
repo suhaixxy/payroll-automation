@@ -128,4 +128,26 @@ export function deleteAdjustment(id) {
   return authedFetch(`/api/uc003/adjustments/${encodeURIComponent(id)}`, { method: 'DELETE' });
 }
 
+// Performance inputs — full CRUD (manager-only mutations, enforced
+// server-side). Saving one is how an incomplete MISSING_PERFORMANCE_INPUT
+// line gets resolved (guide §5.8).
+export function fetchPerformanceInputs(periodId) {
+  return authedFetch(`/api/uc003/performance-inputs?periodId=${encodeURIComponent(periodId)}`);
+}
+
+export function createPerformanceInput(body) {
+  return authedFetch('/api/uc003/performance-inputs', { method: 'POST', body: JSON.stringify(body) });
+}
+
+export function updatePerformanceInput(id, body) {
+  return authedFetch(`/api/uc003/performance-inputs/${encodeURIComponent(id)}`, {
+    method: 'PATCH',
+    body: JSON.stringify(body),
+  });
+}
+
+export function deletePerformanceInput(id) {
+  return authedFetch(`/api/uc003/performance-inputs/${encodeURIComponent(id)}`, { method: 'DELETE' });
+}
+
 export { apiGet, apiPost };
