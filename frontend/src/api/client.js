@@ -66,21 +66,40 @@ export function fetchCurrentUser() {
   return authedFetch('/api/user/auth');
 }
 
-// UC-003: periods WITH status (the plain /api/pay-periods list has no
-// status, and the payroll page needs to know which ones are 'validated').
+// UC-003 (guide §6): the /api/uc003 calculation surface. Responses use the
+// standard { success, data, meta } envelope — callers read body.data.
 export function fetchPayrollPeriods() {
-  return authedFetch('/api/payroll/periods/list');
+  return authedFetch('/api/uc003/periods');
 }
 
-export function calculatePayroll(payPeriodId) {
-  return authedFetch('/api/payroll/calculate', {
+export function calculatePayroll(periodId) {
+  return authedFetch(`/api/uc003/periods/${encodeURIComponent(periodId)}/calculate`, {
     method: 'POST',
-    body: JSON.stringify({ payPeriodId }),
   });
 }
 
-export function fetchPayrollForPeriod(payPeriodId) {
-  return authedFetch(`/api/payroll/${encodeURIComponent(payPeriodId)}`);
+export function recalculatePayroll(periodId) {
+  return authedFetch(`/api/uc003/periods/${encodeURIComponent(periodId)}/recalculate`, {
+    method: 'POST',
+  });
+}
+
+export function submitForApproval(periodId) {
+  return authedFetch(`/api/uc003/periods/${encodeURIComponent(periodId)}/submit-approval`, {
+    method: 'POST',
+  });
+}
+
+export function fetchPayrollSummary(periodId) {
+  return authedFetch(`/api/uc003/periods/${encodeURIComponent(periodId)}/summary`);
+}
+
+export function fetchPayrollLines(periodId, query = 'limit=100') {
+  return authedFetch(`/api/uc003/periods/${encodeURIComponent(periodId)}/lines?${query}`);
+}
+
+export function fetchRunHistory(periodId) {
+  return authedFetch(`/api/uc003/periods/${encodeURIComponent(periodId)}/runs`);
 }
 
 export { apiGet, apiPost };

@@ -5,29 +5,34 @@ import {
   fetchCurrentUser,
   fetchPayrollPeriods,
   calculatePayroll,
-  fetchPayrollForPeriod,
+  recalculatePayroll,
+  submitForApproval,
+  fetchPayrollSummary,
+  fetchPayrollLines,
 } from '../api/client';
-import PayrollLineTable, { formatCents } from '../components/PayrollLineTable';
+import PayrollLineTable, { formatMoney } from '../components/PayrollLineTable';
 import LoginPanel from '../components/LoginPanel';
 // Shared status contract (UC-003 guide §5.1) — same file the backend uses.
 import payrollStatus from '../../../shared/payrollStatus.json';
 
 const PAYROLL_STATUS = payrollStatus.statuses;
 
-// UC-003 page: accounting staff pick a validated pay period and run the
-// payroll calculation on its frozen hour snapshot. Shows derived period
-// totals, the per-staff lines with incomplete flags, and the variance
-// warning against the previous period. Requires a login — the calculation
-// endpoints are JWT-protected.
+// UC-003 page: pick a validated pay period and run the payroll calculation
+// on its frozen hour snapshot. Every execution is a numbered, immutable
+// calculation RUN pinned to a statutory rate set; recalculating creates the
+// next run instead of overwriting. A manager then submits the calculated
+// period to approval (UC-004). Requires a login — every run is tied to who
+// triggered it.
 function PayrollCalcPage() {
   const [user, setUser] = useState(null);
   const [authChecked, setAuthChecked] = useState(false);
   const [payPeriods, setPayPeriods] = useState([]);
-  const [selectedPayPeriodId, setSelectedPayPeriodId] = useState('');
-  const [payroll, setPayroll] = useState(null); // GET /payroll/:id response
+  const [selectedPeriodId, setSelectedPeriodId] = useState('');
+  const [summary, setSummary] = useState(null); // { period, run, variance... }
+  const [lines, setLines] = useState(null);
   const [loading, setLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState(null);
-  const [justCalculated, setJustCalculated] = useState(false);
+  const [successMessage, setSuccessMessage] = useState(null);
 
   // Restore the session from a stored token, if there is one.
   useEffect(() => {
@@ -64,7 +69,7 @@ function PayrollCalcPage() {
   async function loadPeriods(keepSelectionId) {
     const result = await fetchPayrollPeriods();
     if (sessionExpired(result)) return;
-    const periods = result.data.payPeriods || [];
+    const periods = result.data?.data?.periods || [];
     setPayPeriods(periods);
 
     if (keepSelectionId) return; // just refreshing statuses after a run
@@ -73,53 +78,86 @@ function PayrollCalcPage() {
     const defaultPeriod =
       periods.find((period) => period.status === PAYROLL_STATUS.VALIDATED) || periods[0];
     if (defaultPeriod) {
-      setSelectedPayPeriodId(defaultPeriod.id);
+      setSelectedPeriodId(defaultPeriod.id);
       loadPayroll(defaultPeriod.id);
     }
   }
 
-  async function loadPayroll(payPeriodId) {
-    setPayroll(null);
-    const result = await fetchPayrollForPeriod(payPeriodId);
-    if (sessionExpired(result)) return;
-    // 404 just means "no lines yet" — the empty state covers that.
-    if (result.ok) setPayroll(result.data);
+  async function loadPayroll(periodId) {
+    setSummary(null);
+    setLines(null);
+    const [summaryResult, linesResult] = await Promise.all([
+      fetchPayrollSummary(periodId),
+      fetchPayrollLines(periodId),
+    ]);
+    if (sessionExpired(summaryResult)) return;
+    if (summaryResult.ok) setSummary(summaryResult.data.data);
+    if (linesResult.ok) setLines(linesResult.data.data.lines || []);
   }
 
   function handlePeriodChange(event) {
-    const payPeriodId = event.target.value;
-    setSelectedPayPeriodId(payPeriodId);
+    const periodId = event.target.value;
+    setSelectedPeriodId(periodId);
     setErrorMessage(null);
-    setJustCalculated(false);
-    loadPayroll(payPeriodId);
+    setSuccessMessage(null);
+    loadPayroll(periodId);
   }
 
-  async function handleCalculate() {
+  // Shared wrapper for calculate / recalculate / submit: run the action,
+  // surface the server's message on failure, refresh everything on success.
+  async function runAction(action, buildSuccessMessage) {
     setLoading(true);
     setErrorMessage(null);
-    setJustCalculated(false);
+    setSuccessMessage(null);
 
-    const result = await calculatePayroll(selectedPayPeriodId);
+    const result = await action(selectedPeriodId);
     if (sessionExpired(result)) return;
 
     if (!result.ok) {
-      // 409 not-validated / 404 unknown period — show the server's message.
-      setErrorMessage(result.data?.message || 'Calculation failed.');
+      setErrorMessage(result.data?.error?.message || result.data?.message || 'Action failed.');
     } else {
-      setJustCalculated(true);
-      await Promise.all([loadPayroll(selectedPayPeriodId), loadPeriods(selectedPayPeriodId)]);
+      setSuccessMessage(buildSuccessMessage(result.data.data));
+      await Promise.all([loadPayroll(selectedPeriodId), loadPeriods(selectedPeriodId)]);
     }
     setLoading(false);
   }
 
+  const handleCalculate = () =>
+    runAction(
+      calculatePayroll,
+      (data) =>
+        `Run #${data.run.runNumber} complete (rate set ${data.run.rateSetVersion}) — the period is now calculated. Submit it for approval when the lines look right.`
+    );
+
+  const handleRecalculate = () =>
+    runAction(
+      recalculatePayroll,
+      (data) =>
+        `Recalculated as run #${data.run.runNumber} — previous runs are kept for the audit trail.`
+    );
+
+  const handleSubmit = () =>
+    runAction(
+      submitForApproval,
+      () => 'Submitted — the period is now pending approval (UC-004).'
+    );
+
   function handleLogout() {
     clearAccessToken();
     setUser(null);
-    setPayroll(null);
+    setSummary(null);
+    setLines(null);
     setPayPeriods([]);
   }
 
-  const selectedPeriod = payPeriods.find((period) => period.id === selectedPayPeriodId);
+  const selectedPeriod = payPeriods.find((period) => period.id === selectedPeriodId);
+  const periodStatus = selectedPeriod?.status;
+  const run = summary?.run;
+
+  const canCalculate = periodStatus === PAYROLL_STATUS.VALIDATED;
+  const canRecalculate =
+    periodStatus === PAYROLL_STATUS.CALCULATED || periodStatus === PAYROLL_STATUS.PENDING_APPROVAL;
+  const canSubmit = periodStatus === PAYROLL_STATUS.CALCULATED && user?.role === 'manager';
 
   if (!authChecked) {
     return (
@@ -150,9 +188,9 @@ function PayrollCalcPage() {
         <h2>Payroll Calculation</h2>
         <p className="muted">
           Runs the pay calculation on a validated period's frozen hour snapshot: part-timer gross from
-          hours × rate (with OT and public-holiday multipliers), full-timer incentives from performance
-          inputs, and CPF/SDL computed by the system. A successful run hands the period to management
-          approval (UC-004).
+          hours × rate (OT and public-holiday multipliers from the statutory rate set), full-timer
+          incentives from performance inputs, CPF by age band, and employer-borne SDL. Each execution
+          is an immutable numbered run; a manager submits the calculated period to approval (UC-004).
         </p>
         <p className="muted">
           Signed in as <strong>{user.name}</strong> ({user.role}) ·{' '}
@@ -166,7 +204,7 @@ function PayrollCalcPage() {
         <label htmlFor="payroll-period-select">Pay Period</label>
         <select
           id="payroll-period-select"
-          value={selectedPayPeriodId}
+          value={selectedPeriodId}
           onChange={handlePeriodChange}
           disabled={loading || payPeriods.length === 0}
         >
@@ -176,21 +214,40 @@ function PayrollCalcPage() {
             </option>
           ))}
         </select>
+        {run && (
+          <span className="muted button-row-caption">
+            Run #{run.runNumber} · rate set {run.rateSetVersion} · by {run.runByName}
+          </span>
+        )}
       </div>
 
       <div className="button-row">
-        <button
-          className="primary"
-          onClick={handleCalculate}
-          disabled={loading || !selectedPayPeriodId}
-        >
-          {loading && <span className="spinner" />}
-          {loading ? 'Calculating…' : 'Calculate Payroll'}
-        </button>
-        {selectedPeriod && selectedPeriod.status !== PAYROLL_STATUS.VALIDATED && (
+        {canCalculate && (
+          <button className="primary" onClick={handleCalculate} disabled={loading || !selectedPeriodId}>
+            {loading && <span className="spinner" />}
+            {loading ? 'Calculating…' : 'Calculate Payroll'}
+          </button>
+        )}
+        {canRecalculate && (
+          <button className="primary" onClick={handleRecalculate} disabled={loading}>
+            {loading && <span className="spinner" />}
+            {loading ? 'Recalculating…' : 'Recalculate (new run)'}
+          </button>
+        )}
+        {canSubmit && (
+          <button onClick={handleSubmit} disabled={loading}>
+            Submit for Approval
+          </button>
+        )}
+        {!canCalculate && !canRecalculate && selectedPeriod && (
           <span className="muted button-row-caption">
-            Only a period in <strong>validated</strong> status can be calculated — this one is{' '}
-            {selectedPeriod.status.replace(/_/g, ' ')}.
+            This period is <strong>{periodStatus.replace(/_/g, ' ')}</strong> — payroll can no longer
+            be recalculated here.
+          </span>
+        )}
+        {periodStatus === PAYROLL_STATUS.PENDING_APPROVAL && (
+          <span className="muted button-row-caption">
+            Awaiting approval (UC-004). Recalculating moves it back to calculated.
           </span>
         )}
       </div>
@@ -204,73 +261,72 @@ function PayrollCalcPage() {
         </div>
       )}
 
-      {justCalculated && (
+      {successMessage && (
         <div className="banner success-banner">
           <span className="banner-icon" aria-hidden="true">
             ✓
           </span>
-          <span>
-            Payroll calculated — the period is now <strong>pending approval</strong> (UC-004).
-          </span>
+          <span>{successMessage}</span>
         </div>
       )}
 
-      {payroll?.varianceWarning && payroll.variance && (
+      {summary?.varianceWarning && summary.variance && (
         <div className="banner warning-banner">
           <span className="banner-icon" aria-hidden="true">
             ⚠
           </span>
           <span>
-            Variance warning: this period's gross ({formatCents(payroll.variance.currentGrossCents)})
-            differs from the previous period's ({formatCents(payroll.variance.previousGrossCents)}) by
-            more than {payroll.variance.thresholdPct}%. Review before approving — the run itself
+            Variance warning: net payable ({formatMoney(summary.variance.currentNetPayable)}) is{' '}
+            {summary.variance.pctChange}% away from the previous period's (
+            {formatMoney(summary.variance.previousNetPayable)}) — over the{' '}
+            {summary.variance.thresholdPct}% threshold. Review before submitting — the run itself
             completed normally.
           </span>
         </div>
       )}
 
-      {payroll?.incompleteCount > 0 && (
+      {run && run.linesIncomplete > 0 && (
         <div className="banner warning-banner">
           <span className="banner-icon" aria-hidden="true">
             ⚠
           </span>
           <span>
-            {payroll.incompleteCount} {payroll.incompleteCount === 1 ? 'line is' : 'lines are'}{' '}
-            incomplete and excluded from the period totals — see the reasons in the table below.
+            {run.linesIncomplete} {run.linesIncomplete === 1 ? 'line is' : 'lines are'} incomplete and
+            excluded from the period totals — see the reasons in the table below. The period cannot be
+            submitted for approval until every line is complete.
           </span>
         </div>
       )}
 
-      {payroll && (
+      {run && (
         <div className="stat-grid">
           <div className="stat-tile">
             <p className="stat-label">Gross + Incentives</p>
-            <div className="stat-value">{formatCents(payroll.totals.grossCents)}</div>
+            <div className="stat-value">{formatMoney(run.totals.gross)}</div>
             <p className="stat-sub">complete lines only</p>
           </div>
           <div className="stat-tile">
             <p className="stat-label">Employee Deductions</p>
-            <div className="stat-value">{formatCents(payroll.totals.deductionsCents)}</div>
+            <div className="stat-value">{formatMoney(run.totals.employeeDeductions)}</div>
             <p className="stat-sub">CPF (employee) only</p>
           </div>
           <div className="stat-tile">
             <p className="stat-label">Employer Cost</p>
-            <div className="stat-value">{formatCents(payroll.totals.employerCostCents ?? 0)}</div>
+            <div className="stat-value">{formatMoney(run.totals.employerCost)}</div>
             <p className="stat-sub">CPF (employer) + SDL — not deducted from pay</p>
           </div>
           <div className="stat-tile">
             <p className="stat-label">Net Payable</p>
-            <div className="stat-value">{formatCents(payroll.totals.netCents)}</div>
+            <div className="stat-value">{formatMoney(run.totals.netPayable)}</div>
             <p className="stat-sub">what payment (UC-005) will pay out</p>
           </div>
           <div className="stat-tile">
             <p className="stat-label">Payroll Lines</p>
-            <div className={`stat-value${payroll.incompleteCount > 0 ? ' stat-warning' : ''}`}>
-              {payroll.lineCount}
+            <div className={`stat-value${run.linesIncomplete > 0 ? ' stat-warning' : ''}`}>
+              {run.linesComplete + run.linesIncomplete}
             </div>
             <p className="stat-sub">
-              {payroll.lineCount - payroll.incompleteCount} complete · {payroll.incompleteCount}{' '}
-              incomplete
+              {run.linesComplete} complete · {run.linesIncomplete} incomplete
             </p>
           </div>
         </div>
@@ -279,13 +335,13 @@ function PayrollCalcPage() {
       <div className="card">
         <div className="card-header">
           <h2>Per-Staff Payroll Lines</h2>
-          {payroll?.lines && (
+          {lines && (
             <span className="card-count">
-              {payroll.lines.length} {payroll.lines.length === 1 ? 'staff member' : 'staff'}
+              {lines.length} {lines.length === 1 ? 'staff member' : 'staff'}
             </span>
           )}
         </div>
-        <PayrollLineTable lines={payroll?.lines} />
+        <PayrollLineTable lines={lines} />
       </div>
     </div>
   );

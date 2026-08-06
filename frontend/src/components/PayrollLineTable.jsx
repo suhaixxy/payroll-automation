@@ -1,10 +1,10 @@
 import React from 'react';
 
-// UC-003: renders one payroll line per staff member. All money arrives as
-// integer cents from the API and is only turned into dollars HERE, at the
-// display edge — no float maths ever happens on money values.
-export function formatCents(cents) {
-  return (cents / 100).toLocaleString('en-SG', {
+// UC-003: renders one payroll line per staff member. Amounts arrive as
+// NUMERIC(12,2) strings from the API (exact, no float maths anywhere) and
+// are formatted into dollars only HERE, at the display edge.
+export function formatMoney(value) {
+  return Number(value ?? 0).toLocaleString('en-SG', {
     style: 'currency',
     currency: 'SGD',
   });
@@ -27,8 +27,9 @@ function PayrollLineTable({ lines }) {
             <th>Staff ID</th>
             <th>Name</th>
             <th>Type</th>
-            <th className="numeric">Gross</th>
+            <th className="numeric">Hours Gross</th>
             <th className="numeric">Incentive</th>
+            <th className="numeric">Gross Total</th>
             <th className="numeric">CPF (Employee)</th>
             <th className="numeric">CPF (Employer)</th>
             <th className="numeric">SDL (Employer)</th>
@@ -42,21 +43,22 @@ function PayrollLineTable({ lines }) {
               <td>{line.externalRef}</td>
               <td>{line.staffName}</td>
               <td>{line.employmentType === 'full_time' ? 'Full-time' : 'Part-time'}</td>
-              <td className="numeric">{formatCents(line.grossPayCents)}</td>
-              <td className="numeric">{formatCents(line.incentiveCents)}</td>
+              <td className="numeric">{formatMoney(line.grossFromHours)}</td>
+              <td className="numeric">{formatMoney(line.incentiveAmount)}</td>
+              <td className="numeric">{formatMoney(line.grossTotal)}</td>
               <td className="numeric">
                 {line.cpfEligible === false ? (
                   // Correct behaviour for e.g. work-pass holders (guide §5.5)
                   // — badged so a $0 here isn't mistaken for a bug.
                   <span className="badge">CPF exempt</span>
                 ) : (
-                  formatCents(line.cpfEmployeeCents)
+                  formatMoney(line.cpfEmployee)
                 )}
               </td>
-              <td className="numeric">{formatCents(line.cpfEmployerCents)}</td>
-              <td className="numeric">{formatCents(line.sdlCents)}</td>
+              <td className="numeric">{formatMoney(line.cpfEmployer)}</td>
+              <td className="numeric">{formatMoney(line.sdl)}</td>
               <td className="numeric">
-                <strong>{formatCents(line.netPayCents)}</strong>
+                <strong>{formatMoney(line.netPay)}</strong>
               </td>
               <td>
                 {line.lineStatus === 'complete' ? (
@@ -70,7 +72,11 @@ function PayrollLineTable({ lines }) {
                     Incomplete
                   </span>
                 )}
-                {line.notes && <div className="line-note">{line.notes}</div>}
+                {(line.incompleteReasons || []).map((reason) => (
+                  <div key={reason.code} className="line-note">
+                    {reason.message}
+                  </div>
+                ))}
               </td>
             </tr>
           ))}
