@@ -1,109 +1,85 @@
-import { useState, useEffect } from "react";
-import {
-  fetchPayPeriods,
-  fetchSyncSummary,
-  triggerImportNow,
-  simulateSheetDown,
-  fetchSyncHistory,
-} from "../api/roster";
-import SyncSummaryCard from "../components/SyncSummaryCard";
+import { Fragment, useEffect, useState } from "react";
+import { fetchPayPeriods, fetchSyncHistory, fetchSyncSummary, simulateSheetDown, triggerImportNow } from "../api/roster";
 import ExceptionList from "../components/ExceptionList";
 import SyncHistoryList from "../components/SyncHistoryList";
+import SyncSummaryCard from "../components/SyncSummaryCard";
+import "../styles/rosterSync.css";
 
-// UC-001 page: accounting staff can pick a pay period, trigger a manual
-// roster sync for it, and see the results — sync summary, per-staff shift
-// breakdown, unmatched/data-issue entries, and recent sync history.
 function RosterSyncPage() {
   const [payPeriods, setPayPeriods] = useState([]);
-  const [selectedPayPeriodId, setSelectedPayPeriodId] = useState(null);
+  const [selectedPayPeriodId, setSelectedPayPeriodId] = useState("");
   const [summary, setSummary] = useState(null);
   const [history, setHistory] = useState([]);
   const [loading, setLoading] = useState(false);
-  const [errorMessage, setErrorMessage] = useState(null);
+  const [errorMessage, setErrorMessage] = useState("");
+  const [preservedDraft, setPreservedDraft] = useState(false);
+  const [expandedStaffId, setExpandedStaffId] = useState(null);
 
-  function refreshSummaryAndHistory(payPeriodId) {
-    fetchSyncSummary(payPeriodId).then(setSummary);
-    fetchSyncHistory(payPeriodId).then((res) => setHistory(res.history));
+  async function refresh(payPeriodId) {
+    const [nextSummary, nextHistory] = await Promise.all([fetchSyncSummary(payPeriodId), fetchSyncHistory(payPeriodId)]);
+    setSummary(nextSummary);
+    setHistory(nextHistory.history);
   }
 
   useEffect(() => {
     fetchPayPeriods().then((periods) => {
       setPayPeriods(periods);
-      const defaultPeriod = periods.find((period) => period.isActive) || periods[0];
-      if (defaultPeriod) {
-        setSelectedPayPeriodId(defaultPeriod.id);
-        refreshSummaryAndHistory(defaultPeriod.id);
+      const selected = periods.find((period) => period.isActive) || periods[0];
+      if (selected) {
+        setSelectedPayPeriodId(selected.id);
+        refresh(selected.id).catch((error) => setErrorMessage(error.message));
       }
-    });
+    }).catch((error) => setErrorMessage(error.message));
   }, []);
 
-  function handlePayPeriodChange(event) {
-    const payPeriodId = event.target.value;
-    setSelectedPayPeriodId(payPeriodId);
-    setErrorMessage(null);
-    refreshSummaryAndHistory(payPeriodId);
-  }
-
-  async function handleImportNow() {
-    setLoading(true);
-    setErrorMessage(null);
-
-    try {
-      const result = await triggerImportNow(selectedPayPeriodId);
-      if (!result.success) {
-        setErrorMessage(result.message);
-        if (result.previousDraft) setSummary(result.previousDraft);
-      } else {
-        setSummary(result);
-      }
-      fetchSyncHistory(selectedPayPeriodId).then((res) => setHistory(res.history));
-    } catch (err) {
-      setErrorMessage(err.message);
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  async function handleSimulateFailure() {
-    setLoading(true);
-    setErrorMessage(null);
-    try {
-      const result = await simulateSheetDown(selectedPayPeriodId);
+  async function applyResult(result) {
+    if (!result.success) {
       setErrorMessage(result.message);
-      if (result.previousDraft) setSummary(result.previousDraft);
+      if (result.previousDraft) {
+        setSummary(result.previousDraft);
+        setPreservedDraft(true);
+      }
+    } else {
+      setSummary(result);
+      setPreservedDraft(false);
+    }
+    const nextHistory = await fetchSyncHistory(selectedPayPeriodId);
+    setHistory(nextHistory.history);
+  }
+
+  async function runImport(action) {
+    if (!selectedPayPeriodId) return;
+    setLoading(true);
+    setErrorMessage("");
+    setPreservedDraft(false);
+    try {
+      await applyResult(await action(selectedPayPeriodId));
+    } catch (error) {
+      setErrorMessage(error.message);
     } finally {
       setLoading(false);
     }
   }
 
   return (
-    <div>
-      <h1>UC-001: Roster Sync</h1>
-
-      <div>
-        <label>Pay Period: </label>
-        <select value={selectedPayPeriodId || ""} onChange={handlePayPeriodChange}>
-          {payPeriods.map((period) => (
-            <option key={period.id} value={period.id}>
-              {period.startDate} to {period.endDate} {period.isActive ? "(active)" : ""}
-            </option>
-          ))}
+    <main className="roster-page">
+      <header className="roster-intro"><h1>UC-001: Roster Sync</h1><p>Import roster shifts, match staff, and maintain draft timesheets for the selected pay period.</p></header>
+      <section className="roster-controls">
+        <label htmlFor="pay-period">Pay period</label>
+        <select id="pay-period" value={selectedPayPeriodId} onChange={(event) => { setSelectedPayPeriodId(event.target.value); setExpandedStaffId(null); refresh(event.target.value).catch((error) => setErrorMessage(error.message)); }} disabled={loading}>
+          {payPeriods.map((period) => <option key={period.id} value={period.id}>{period.startDate} to {period.endDate}{period.isActive ? " (active)" : ""}</option>)}
         </select>
-      </div>
-
-      <button onClick={handleImportNow} disabled={loading}>
-        {loading ? "Syncing..." : "Import Now"}
-      </button>
-      <button onClick={handleSimulateFailure} disabled={loading}>
-        Simulate Sheet Down (demo)
-      </button>
-
-      {errorMessage && <p style={{ color: "red" }}>{errorMessage}</p>}
-
+        <button className="roster-primary" onClick={() => runImport(triggerImportNow)} disabled={loading || !selectedPayPeriodId}>{loading ? "Syncing..." : "Import Now"}</button>
+        <button className="roster-secondary" onClick={() => runImport(simulateSheetDown)} disabled={loading || !selectedPayPeriodId}>Simulate Sheet Down</button>
+      </section>
+      {errorMessage && <p className="roster-banner roster-error">{errorMessage}</p>}
+      {preservedDraft && <p className="roster-banner roster-info">Last synced draft preserved; the live import could not complete.</p>}
       <SyncSummaryCard summary={summary} />
-      <ExceptionList unmatched={summary?.unmatched} invalidTime={summary?.invalidTime} />
-      <SyncHistoryList history={history} />
-    </div>
+      <section className="roster-card"><h2>Draft Timesheet Totals</h2>{summary?.draftTimesheets?.length ? <div className="roster-table-scroll"><table><thead><tr><th>Staff ID</th><th>Name</th><th>Total hours</th><th>Shifts</th></tr></thead><tbody>{summary.draftTimesheets.map((staff) => <Fragment key={staff.staffId}><tr className="roster-expandable" onClick={() => setExpandedStaffId(expandedStaffId === staff.staffId ? null : staff.staffId)}><td>{staff.staffId}</td><td>{staff.fullName}</td><td>{staff.totalHours}</td><td>{expandedStaffId === staff.staffId ? "▲" : "▼"} {staff.shifts.length}</td></tr>{expandedStaffId === staff.staffId && <tr className="roster-breakdown"><td colSpan="4"><table><thead><tr><th>Date</th><th>Time</th><th>Hours</th><th>Matched by</th></tr></thead><tbody>{staff.shifts.map((shift, index) => <tr key={`${shift.date}-${index}`}><td>{shift.date}</td><td>{shift.clockIn}–{shift.clockOut}</td><td>{shift.hours}</td><td>{shift.matchedBy === "name" ? "Name fallback" : "Staff ID"}</td></tr>)}</tbody></table></td></tr>}</Fragment>)}</tbody></table></div> : <p className="roster-empty">No draft timesheets yet — run a sync to populate this table.</p>}</section>
+      <section className="roster-card"><h2>Unmatched Entries</h2><ExceptionList items={summary?.unmatched} /></section>
+      <section className="roster-card"><h2>Data Issues</h2><ExceptionList items={summary?.invalidTime} variant="invalidTime" /></section>
+      <section className="roster-card"><h2>Sync History</h2><SyncHistoryList history={history} /></section>
+    </main>
   );
 }
 

@@ -2,6 +2,10 @@
 // Times are simple 24-hour strings like "08:00" or "17:30".
 
 function timeStringToMinutes(timeString) {
+  if (typeof timeString !== "string" || !/^([01]\d|2[0-3]):[0-5]\d$/.test(timeString)) {
+    return Number.NaN;
+  }
+
   const [hours, minutes] = timeString.split(":").map(Number);
   return hours * 60 + minutes;
 }

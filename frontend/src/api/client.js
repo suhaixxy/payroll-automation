@@ -8,16 +8,17 @@ async function apiGet(path) {
   return response.json();
 }
 
-async function apiPost(path, body) {
+async function apiPost(path, body, { allowStatuses = [] } = {}) {
   const response = await fetch(`${BASE_URL}${path}`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
   });
-  if (!response.ok) {
+  const payload = await response.json();
+  if (!response.ok && !allowStatuses.includes(response.status)) {
     throw new Error(`API POST ${path} failed: ${response.status}`);
   }
-  return response.json();
+  return payload;
 }
 
 export { apiGet, apiPost };

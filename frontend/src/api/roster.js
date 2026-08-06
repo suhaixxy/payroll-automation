@@ -16,11 +16,11 @@ function fetchSyncHistory(payPeriodId) {
 }
 
 function triggerImportNow(payPeriodId) {
-  return apiPost("/api/roster/sync", { payPeriodId });
+  return apiPost("/api/roster/sync", { payPeriodId }, { allowStatuses: [424] });
 }
 
 function simulateSheetDown(payPeriodId) {
-  return apiPost("/api/roster/sync", { payPeriodId, simulateFailure: true });
+  return apiPost("/api/roster/sync", { payPeriodId, simulateFailure: true }, { allowStatuses: [424] });
 }
 
 export { fetchPayPeriods, fetchSyncSummary, fetchSyncHistory, triggerImportNow, simulateSheetDown };

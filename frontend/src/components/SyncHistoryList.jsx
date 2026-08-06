@@ -1,33 +1,21 @@
 function SyncHistoryList({ history }) {
-  if (!history || history.length === 0) {
-    return (
-      <div className="card">
-        <h3>Sync History</h3>
-        <p>No sync history yet.</p>
-      </div>
-    );
-  }
+  if (!history?.length) return <p className="roster-empty">No sync history yet for this pay period.</p>;
 
   return (
-    <div className="card">
-      <h3>Sync History</h3>
-      <ul>
-        {history.map((entry, i) => (
-          <li key={i}>
-            {entry.createdAt} — {entry.action} (by {entry.actor})
-            {entry.detail && (
-              <div>
-                {entry.detail.staffSynced !== undefined && `Staff: ${entry.detail.staffSynced}, `}
-                {entry.detail.totalHours !== undefined && `Hours: ${entry.detail.totalHours}, `}
-                {entry.detail.unmatchedCount !== undefined && `Unmatched: ${entry.detail.unmatchedCount}, `}
-                {entry.detail.invalidTimeCount !== undefined && `Invalid: ${entry.detail.invalidTimeCount}`}
-                {entry.detail.reason && `Reason: ${entry.detail.reason}`}
-              </div>
-            )}
+    <ul className="roster-history-list">
+      {history.map((entry, index) => {
+        const failed = entry.action === "roster_sync_failed";
+        const actor = entry.actor === "scheduler" ? "Automatic" : "Manual (Import Now)";
+        return (
+          <li key={`${entry.createdAt}-${index}`} className={failed ? "roster-critical" : "roster-synced"}>
+            <span>{failed ? "Failed" : "Synced"}</span>
+            <strong>{actor}</strong>
+            <small>{failed ? entry.detail?.reason : `${entry.detail?.staffSynced ?? 0} staff, ${entry.detail?.totalHours ?? 0}h`}</small>
+            <time>{new Date(entry.createdAt).toLocaleString()}</time>
           </li>
-        ))}
-      </ul>
-    </div>
+        );
+      })}
+    </ul>
   );
 }
 

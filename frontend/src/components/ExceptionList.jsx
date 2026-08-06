@@ -1,39 +1,19 @@
-function ExceptionList({ unmatched, invalidTime }) {
-  const hasUnmatched = unmatched && unmatched.length > 0;
-  const hasInvalidTime = invalidTime && invalidTime.length > 0;
-
-  if (!hasUnmatched && !hasInvalidTime) return null;
+function ExceptionList({ items, variant = "unmatched" }) {
+  const invalidTime = variant === "invalidTime";
+  if (!items?.length) {
+    return <p className="roster-empty">{invalidTime ? "No data issues found." : "No unmatched entries found."}</p>;
+  }
 
   return (
-    <div className="card">
-      <h3>Exceptions</h3>
-
-      {hasUnmatched && (
-        <>
-          <h4>Unmatched ({unmatched.length})</h4>
-          <ul>
-            {unmatched.map((row, i) => (
-              <li key={i}>
-                {row.rosterRawName} — {row.date} ({row.hours}h)
-              </li>
-            ))}
-          </ul>
-        </>
-      )}
-
-      {hasInvalidTime && (
-        <>
-          <h4>Invalid Time Entries ({invalidTime.length})</h4>
-          <ul>
-            {invalidTime.map((row, i) => (
-              <li key={i}>
-                {row.rosterRawName} — {row.date}
-              </li>
-            ))}
-          </ul>
-        </>
-      )}
-    </div>
+    <ul className="roster-exception-list">
+      {items.map((entry, index) => (
+        <li key={`${entry.rosterRawName}-${entry.date}-${index}`} className={invalidTime ? "roster-critical" : "roster-unmatched"}>
+          <span>{invalidTime ? "Data issue" : "Unmatched"}</span>
+          <strong>{entry.rosterRawName}</strong>
+          <small>{entry.date}{invalidTime ? "" : ` · ${entry.hours}h`}</small>
+        </li>
+      ))}
+    </ul>
   );
 }
 
