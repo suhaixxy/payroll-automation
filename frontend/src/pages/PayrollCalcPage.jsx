@@ -11,6 +11,7 @@ import {
   fetchPayrollLines,
 } from '../api/client';
 import PayrollLineTable, { formatMoney } from '../components/PayrollLineTable';
+import AdjustmentsPanel from '../components/AdjustmentsPanel';
 import LoginPanel from '../components/LoginPanel';
 // Shared status contract (UC-003 guide §5.1) — same file the backend uses.
 import payrollStatus from '../../../shared/payrollStatus.json';
@@ -33,6 +34,8 @@ function PayrollCalcPage() {
   const [loading, setLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState(null);
   const [successMessage, setSuccessMessage] = useState(null);
+  const [activeTab, setActiveTab] = useState('lines'); // 'lines' | 'adjustments'
+  const [dataChangedSinceRun, setDataChangedSinceRun] = useState(false);
 
   // Restore the session from a stored token, if there is one.
   useEffect(() => {
@@ -117,6 +120,7 @@ function PayrollCalcPage() {
       setErrorMessage(result.data?.error?.message || result.data?.message || 'Action failed.');
     } else {
       setSuccessMessage(buildSuccessMessage(result.data.data));
+      setDataChangedSinceRun(false);
       await Promise.all([loadPayroll(selectedPeriodId), loadPeriods(selectedPeriodId)]);
     }
     setLoading(false);
@@ -285,6 +289,18 @@ function PayrollCalcPage() {
         </div>
       )}
 
+      {dataChangedSinceRun && run && (
+        <div className="banner warning-banner">
+          <span className="banner-icon" aria-hidden="true">
+            ⚠
+          </span>
+          <span>
+            Adjustments changed since run #{run.runNumber} — recalculate to fold them into the
+            payroll figures shown here.
+          </span>
+        </div>
+      )}
+
       {run && run.linesIncomplete > 0 && (
         <div className="banner warning-banner">
           <span className="banner-icon" aria-hidden="true">
@@ -332,17 +348,49 @@ function PayrollCalcPage() {
         </div>
       )}
 
-      <div className="card">
-        <div className="card-header">
-          <h2>Per-Staff Payroll Lines</h2>
-          {lines && (
-            <span className="card-count">
-              {lines.length} {lines.length === 1 ? 'staff member' : 'staff'}
-            </span>
-          )}
-        </div>
-        <PayrollLineTable lines={lines} />
+      <div className="tab-row" role="tablist">
+        <button
+          type="button"
+          role="tab"
+          aria-selected={activeTab === 'lines'}
+          className={`tab${activeTab === 'lines' ? ' tab-active' : ''}`}
+          onClick={() => setActiveTab('lines')}
+        >
+          Payroll Lines
+        </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={activeTab === 'adjustments'}
+          className={`tab${activeTab === 'adjustments' ? ' tab-active' : ''}`}
+          onClick={() => setActiveTab('adjustments')}
+        >
+          Adjustments
+        </button>
       </div>
+
+      {activeTab === 'lines' && (
+        <div className="card">
+          <div className="card-header">
+            <h2>Per-Staff Payroll Lines</h2>
+            {lines && (
+              <span className="card-count">
+                {lines.length} {lines.length === 1 ? 'staff member' : 'staff'}
+              </span>
+            )}
+          </div>
+          <PayrollLineTable lines={lines} />
+        </div>
+      )}
+
+      {activeTab === 'adjustments' && selectedPeriodId && (
+        <AdjustmentsPanel
+          periodId={selectedPeriodId}
+          periodStatus={periodStatus}
+          user={user}
+          onChanged={() => setDataChangedSinceRun(true)}
+        />
+      )}
     </div>
   );
 }

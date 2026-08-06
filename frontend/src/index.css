@@ -327,6 +327,35 @@ tbody tr:hover { background: #faf6f4; }
 
 .history-detail { flex: 1 1 auto; }
 
+/* ── In-page tabs (Payroll Lines | Adjustments | ...) ──────────────── */
+
+.tab-row {
+  display: flex;
+  gap: 0.2rem;
+  border-bottom: 2px solid var(--border);
+  margin: 1rem 0 1.1rem;
+}
+
+.tab {
+  border: none;
+  background: transparent;
+  border-radius: 6px 6px 0 0;
+  padding: 0.5rem 1rem;
+  margin-bottom: -2px;
+  border-bottom: 2px solid transparent;
+  color: var(--text-muted);
+  font-weight: 500;
+}
+
+.tab:hover:not(:disabled) { color: var(--accent); border-bottom-color: var(--border); }
+
+.tab-active,
+.tab-active:hover:not(:disabled) {
+  color: var(--accent);
+  font-weight: 650;
+  border-bottom-color: var(--accent);
+}
+
 /* ── States ────────────────────────────────────────────────────────── */
 
 .empty-state {

@@ -102,4 +102,30 @@ export function fetchRunHistory(periodId) {
   return authedFetch(`/api/uc003/periods/${encodeURIComponent(periodId)}/runs`);
 }
 
+// Staff options for the adjustment / performance-input forms (read-only).
+export function fetchUc003Staff() {
+  return authedFetch('/api/uc003/staff');
+}
+
+// Payroll adjustments — full CRUD (manager-only mutations, enforced
+// server-side; the UI only hides buttons).
+export function fetchAdjustments(periodId) {
+  return authedFetch(`/api/uc003/adjustments?periodId=${encodeURIComponent(periodId)}`);
+}
+
+export function createAdjustment(body) {
+  return authedFetch('/api/uc003/adjustments', { method: 'POST', body: JSON.stringify(body) });
+}
+
+export function updateAdjustment(id, body) {
+  return authedFetch(`/api/uc003/adjustments/${encodeURIComponent(id)}`, {
+    method: 'PATCH',
+    body: JSON.stringify(body),
+  });
+}
+
+export function deleteAdjustment(id) {
+  return authedFetch(`/api/uc003/adjustments/${encodeURIComponent(id)}`, { method: 'DELETE' });
+}
+
 export { apiGet, apiPost };
