@@ -127,9 +127,63 @@ describe('§5.3 incentives (full-timers)', () => {
 
 // ── §5.4 adjustments ─────────────────────────────────────────────────────
 
-// Engine folds payroll_adjustments into gross and the CPF wage base at
-// guide phase 4.7 — the test lands with that checkpoint.
-test.todo('§5.4 adjustments enter gross, and only cpf_applicable ones enter the CPF wage base');
+describe('§5.4 adjustments', () => {
+  const bonus = { adjustmentType: 'bonus', amountCents: 20000, cpfApplicable: true, reason: 'Retention bonus' };
+  const deduction = { adjustmentType: 'deduction', amountCents: -5000, cpfApplicable: false, reason: 'Uniform cost' };
+
+  test('adjustments enter gross; ONLY cpf_applicable ones enter the CPF wage base', () => {
+    // $612 from hours + $200 bonus (CPF) − $50 deduction (non-CPF)
+    const line = calc({
+      staff: partTimer(), // age 36 -> 20%/17% band
+      rate: { hourlyRateCents: 1800 },
+      hourRows: [hours(34)],
+      adjustments: [bonus, deduction],
+    });
+    expect(line.adjustmentsTotalCents).toBe(15000); // +200 − 50
+    expect(line.grossTotalCents).toBe(61200 + 15000); // 762.00
+    // CPF wage base = 612 + 200 (bonus only): employee floor(812 × 20%) = 162,
+    // total round(812 × 37% = 300.44) = 300 -> employer 138.
+    expect(line.cpfEmployeeCents).toBe(16200);
+    expect(line.cpfEmployerCents).toBe(13800);
+    expect(line.netPayCents).toBe(76200 - 16200);
+    // SDL runs on the FULL gross (762): 1.905 -> 1.91 -> below the $2 floor.
+    expect(line.sdlCents).toBe(200);
+    expect(line.lineStatus).toBe('complete');
+  });
+
+  test('a clawback can push pay negative, but statutory bases clamp at zero', () => {
+    const line = calc({
+      staff: fullTimer(),
+      performanceInputs: [input('sessions', 10, 10)], // $100
+      adjustments: [
+        { adjustmentType: 'clawback', amountCents: -15000, cpfApplicable: true, reason: 'Overpaid last period' },
+      ],
+    });
+    expect(line.grossTotalCents).toBe(-5000);
+    expect(line.cpfEmployeeCents).toBe(0); // wage base clamped at 0
+    expect(line.sdlCents).toBe(0); // no levy on negative wages
+    expect(line.netPayCents).toBe(-5000);
+    expect(line.lineStatus).toBe('complete');
+  });
+
+  test('breakdown lists each adjustment with its reason before the gross subtotal', () => {
+    const line = calc({
+      staff: partTimer(),
+      rate: { hourlyRateCents: 1800 },
+      hourRows: [hours(34)],
+      adjustments: [bonus, deduction],
+    });
+    const labels = line.breakdown.map((step) => step.label);
+    const bonusIndex = labels.indexOf('Adjustment — bonus');
+    const grossIndex = labels.indexOf('Gross total');
+    expect(bonusIndex).toBeGreaterThan(-1);
+    expect(bonusIndex).toBeLessThan(grossIndex);
+    expect(line.breakdown[bonusIndex].detail).toBe('Retention bonus');
+    expect(line.breakdown[bonusIndex].amount).toBe(200);
+    const deductionStep = line.breakdown.find((step) => step.label === 'Adjustment — deduction');
+    expect(deductionStep.amount).toBe(-50);
+  });
+});
 
 // ── §5.5 CPF ─────────────────────────────────────────────────────────────
 
