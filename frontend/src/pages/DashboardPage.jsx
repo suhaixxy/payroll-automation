@@ -30,12 +30,14 @@ function ComingSoon({ label }) {
 
 // One entry per use case. To plug in a finished page: import the real
 // component at the top of this file, then replace its `component` value here.
+// Labels use domain language, not use-case numbers (guide §7.8) — the
+// UC-00X codes stay in code comments and docs, never in the UI.
 const TABS = [
-  { key: 'roster', label: 'Roster Sync (UC-001)', component: RosterSyncPage },
-  { key: 'timesheets', label: 'Timesheet Validation (UC-002)', component: () => <ComingSoon label="Timesheet Validation" /> },
-  { key: 'payroll', label: 'Payroll Calculation (UC-003)', component: PayrollCalcPage },
-  { key: 'approval', label: 'Approval (UC-004)', component: () => <ComingSoon label="Approval" /> },
-  { key: 'payment', label: 'Payment & HRMS (UC-005)', component: () => <ComingSoon label="Payment & HRMS" /> },
+  { key: 'roster', label: 'Roster Sync', component: RosterSyncPage },
+  { key: 'timesheets', label: 'Timesheets', component: () => <ComingSoon label="Timesheet Validation" /> },
+  { key: 'payroll', label: 'Payroll Calculation', component: PayrollCalcPage },
+  { key: 'approval', label: 'Approvals', component: () => <ComingSoon label="Approval" /> },
+  { key: 'payment', label: 'Payments & HRMS', component: () => <ComingSoon label="Payment & HRMS" /> },
 ];
 
 // Shared shell for the whole app: the top bar, the tab nav switching

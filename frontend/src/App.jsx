@@ -10,12 +10,14 @@ function App() {
   return (
     <BrowserRouter>
       <nav style={{ padding: "1rem", borderBottom: "1px solid #ccc" }}>
+        {/* Domain language, not use-case numbers (guide §7.8) — staff who
+            use this every day think "payroll", not "UC-003". */}
         <Link to="/" style={{ marginRight: "1rem" }}>Dashboard</Link>
-        <Link to="/roster" style={{ marginRight: "1rem" }}>UC-001 Roster</Link>
-        <Link to="/timesheets" style={{ marginRight: "1rem" }}>UC-002 Timesheets</Link>
-        <Link to="/payroll" style={{ marginRight: "1rem" }}>UC-003 Payroll</Link>
-        <Link to="/approvals" style={{ marginRight: "1rem" }}>UC-004 Approvals</Link>
-        <Link to="/payments">UC-005 Payments</Link>
+        <Link to="/roster" style={{ marginRight: "1rem" }}>Roster</Link>
+        <Link to="/timesheets" style={{ marginRight: "1rem" }}>Timesheets</Link>
+        <Link to="/payroll" style={{ marginRight: "1rem" }}>Payroll Calculation</Link>
+        <Link to="/approvals" style={{ marginRight: "1rem" }}>Approvals</Link>
+        <Link to="/payments">Payments</Link>
       </nav>
 
       <Routes>
