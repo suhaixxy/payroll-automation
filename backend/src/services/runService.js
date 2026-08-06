@@ -580,6 +580,141 @@ async function getLine(lineId) {
   return { data: rows[0] };
 }
 
+/** §7.9 payroll register: EVERY line of the authoritative run, for the CSV
+ *  export. No paging — a register is only useful complete. */
+async function getRegister(periodId) {
+  const period = await loadPeriod(periodId);
+  if (!period) return { error: 'PERIOD_NOT_FOUND' };
+
+  const run = await loadAuthoritativeRun(periodId);
+  if (!run) return { error: 'NO_RUN' };
+
+  const lines = await sequelize.query(
+    `SELECT s.external_ref AS "externalRef", s.full_name AS "staffName",
+            s.employment_type AS "employmentType", s.cpf_eligible AS "cpfEligible",
+            pl.regular_hours AS "regularHours", pl.ot_hours AS "otHours", pl.ph_hours AS "phHours",
+            pl.hourly_rate_used AS "hourlyRateUsed",
+            pl.gross_from_hours AS "grossFromHours", pl.incentive_amount AS "incentiveAmount",
+            pl.adjustments_total AS "adjustmentsTotal", pl.gross_total AS "grossTotal",
+            pl.cpf_employee AS "cpfEmployee", pl.cpf_employer AS "cpfEmployer",
+            pl.sdl, pl.net_pay AS "netPay",
+            pl.line_status AS "lineStatus", pl.incomplete_reasons AS "incompleteReasons"
+     FROM payroll_lines pl JOIN staff s ON s.id = pl.staff_id
+     WHERE pl.run_id = :runId
+     ORDER BY s.external_ref`,
+    { replacements: { runId: run.id }, type: QueryTypes.SELECT }
+  );
+  return { data: { period, run, lines } };
+}
+
+/** §7.2 per-staff variance: the authoritative run's lines side by side with
+ *  the previous period's, merged by staff so joiners/leavers still show. */
+async function getStaffVariance(periodId) {
+  const period = await loadPeriod(periodId);
+  if (!period) return { error: 'PERIOD_NOT_FOUND' };
+
+  const run = await loadAuthoritativeRun(periodId);
+  if (!run) return { error: 'NO_RUN' };
+
+  const previousRows = await sequelize.query(
+    `SELECT r.id, r.run_number AS "runNumber", r.period_id AS "periodId",
+            to_char(p.start_date, 'YYYY-MM-DD') AS "startDate",
+            to_char(p.end_date, 'YYYY-MM-DD') AS "endDate"
+     FROM calculation_runs r
+     JOIN pay_period p ON p.id = r.period_id
+     WHERE p.start_date < :startDate AND r.status = 'complete'
+     ORDER BY p.start_date DESC, r.run_number DESC
+     LIMIT 1`,
+    { replacements: { startDate: period.startDate }, type: QueryTypes.SELECT }
+  );
+  const previous = previousRows[0] || null;
+
+  const loadRunLines = (runId) =>
+    sequelize.query(
+      `SELECT pl.staff_id AS "staffId", s.external_ref AS "externalRef",
+              s.full_name AS "staffName",
+              pl.net_pay AS "netPay", pl.line_status AS "lineStatus"
+       FROM payroll_lines pl JOIN staff s ON s.id = pl.staff_id
+       WHERE pl.run_id = :runId`,
+      { replacements: { runId }, type: QueryTypes.SELECT }
+    );
+
+  const currentLines = await loadRunLines(run.id);
+  const previousLines = previous ? await loadRunLines(previous.id) : [];
+
+  const byStaff = new Map();
+  for (const line of currentLines) {
+    byStaff.set(line.staffId, {
+      staffId: line.staffId,
+      externalRef: line.externalRef,
+      staffName: line.staffName,
+      current: line,
+      previous: null,
+    });
+  }
+  for (const line of previousLines) {
+    const entry = byStaff.get(line.staffId);
+    if (entry) {
+      entry.previous = line;
+    } else {
+      byStaff.set(line.staffId, {
+        staffId: line.staffId,
+        externalRef: line.externalRef,
+        staffName: line.staffName,
+        current: null,
+        previous: line,
+      });
+    }
+  }
+
+  // Delta maths in integer cents (§2.4); incomplete lines carry no usable
+  // net, so their side of the comparison is null rather than a fake zero.
+  const usableNetCents = (line) =>
+    line && line.lineStatus === 'complete' ? Math.round(Number(line.netPay) * 100) : null;
+
+  const rows = [...byStaff.values()]
+    .map((entry) => {
+      const currentCents = usableNetCents(entry.current);
+      const previousCents = usableNetCents(entry.previous);
+      const deltaCents =
+        currentCents !== null && previousCents !== null ? currentCents - previousCents : null;
+      return {
+        staffId: entry.staffId,
+        externalRef: entry.externalRef,
+        staffName: entry.staffName,
+        currentNet: currentCents !== null ? centsToMoney(currentCents) : null,
+        currentLineStatus: entry.current ? entry.current.lineStatus : null,
+        previousNet: previousCents !== null ? centsToMoney(previousCents) : null,
+        previousLineStatus: entry.previous ? entry.previous.lineStatus : null,
+        delta: deltaCents !== null ? centsToMoney(deltaCents) : null,
+        deltaPct:
+          deltaCents !== null && previousCents > 0
+            ? Number(((deltaCents / previousCents) * 100).toFixed(1))
+            : null,
+      };
+    })
+    .sort((a, b) => {
+      const magnitude = (row) => (row.delta === null ? -1 : Math.abs(Number(row.delta)));
+      return magnitude(b) - magnitude(a) || a.externalRef.localeCompare(b.externalRef);
+    });
+
+  return {
+    data: {
+      period,
+      currentRun: { id: run.id, runNumber: run.runNumber },
+      previousPeriod: previous
+        ? {
+            periodId: previous.periodId,
+            startDate: previous.startDate,
+            endDate: previous.endDate,
+            runNumber: previous.runNumber,
+          }
+        : null,
+      rows,
+    },
+  };
+}
+
 /** §6 run history, newest first, voided included (with reasons). */
 async function getRuns(periodId) {
   const period = await loadPeriod(periodId);
@@ -640,6 +775,8 @@ module.exports = {
   getLines,
   getLine,
   getRuns,
+  getRegister,
+  getStaffVariance,
   listPeriods,
   listStaff,
   VARIANCE_THRESHOLD,

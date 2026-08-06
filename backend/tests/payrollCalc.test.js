@@ -287,6 +287,50 @@ describe('run lifecycle (§3.1, §3.2, §5.9)', () => {
   });
 });
 
+describe('register export and per-staff variance (§7.2, §7.9)', () => {
+  test('export.csv streams the authoritative run as a CSV download', async () => {
+    const anonymous = await request(app).get(`/api/uc003/periods/${periodId}/export.csv`);
+    expect(anonymous.status).toBe(401);
+
+    const response = await asAccounting(
+      request(app).get(`/api/uc003/periods/${periodId}/export.csv`)
+    );
+    expect(response.status).toBe(200);
+    expect(response.headers['content-type']).toMatch(/text\/csv/);
+    expect(response.headers['content-disposition']).toMatch(/payroll-register_2030-07-01_to_2030-07-14_run1\.csv/);
+
+    const csvLines = response.text.replace(/^\uFEFF/, '').trim().split('\r\n');
+    expect(csvLines[0]).toBe(
+      'staff_ref,staff_name,employment_type,cpf_eligible,regular_hours,ot_hours,ph_hours,' +
+        'hourly_rate_used,gross_from_hours,incentive_amount,adjustments_total,gross_total,' +
+        'cpf_employee,cpf_employer,sdl_employer,net_payable,line_status,incomplete_reasons'
+    );
+    expect(csvLines).toHaveLength(1 + 6); // header + one row per staff line
+    const ptaRow = csvLines.find((row) => row.startsWith('T-PTA,'));
+    expect(ptaRow).toContain('904.50'); // gross from hours
+    expect(ptaRow).toContain('724.50'); // net payable
+    const ptcRow = csvLines.find((row) => row.startsWith('T-PTC,'));
+    expect(ptcRow).toContain('MISSING_PAY_RATE');
+  });
+
+  test('variance endpoint returns per-staff rows for the authoritative run', async () => {
+    const response = await asAccounting(
+      request(app).get(`/api/uc003/periods/${periodId}/variance`)
+    );
+    expect(response.status).toBe(200);
+    const data = response.body.data;
+    expect(data.currentRun.runNumber).toBe(1); // run 2 was voided above
+    expect(data.rows).toHaveLength(6);
+
+    const pta = data.rows.find((row) => row.externalRef === 'T-PTA');
+    expect(pta.currentNet).toBe('724.50');
+    // Incomplete lines carry no usable net — surfaced as null, never $0.00.
+    const ptc = data.rows.find((row) => row.externalRef === 'T-PTC');
+    expect(ptc.currentNet).toBeNull();
+    expect(ptc.currentLineStatus).toBe('incomplete');
+  });
+});
+
 describe('submit to approval (§5.1, §6)', () => {
   test('422 while any line of the authoritative run is incomplete', async () => {
     const response = await asManager(

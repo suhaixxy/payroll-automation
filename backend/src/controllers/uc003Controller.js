@@ -186,6 +186,64 @@ async function runs(req, res, next) {
   }
 }
 
+// §7.2 per-staff variance vs the previous period's authoritative run.
+async function staffVariance(req, res, next) {
+  try {
+    if (!checkUuid(res, req.params.periodId, 'PERIOD_NOT_FOUND', 'pay period')) return;
+    const result = await runService.getStaffVariance(req.params.periodId);
+    if (result.error) return failFromServiceError(res, result);
+    res.ok(result.data);
+  } catch (err) {
+    next(err);
+  }
+}
+
+// RFC 4180 quoting; only quote when the value needs it.
+function csvField(value) {
+  const text = value === null || value === undefined ? '' : String(value);
+  return /[",\r\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
+}
+
+// §7.9 payroll register export. The ONE endpoint that skips the JSON
+// envelope — it serves a file download (text/csv + Content-Disposition).
+async function exportCsv(req, res, next) {
+  try {
+    if (!checkUuid(res, req.params.periodId, 'PERIOD_NOT_FOUND', 'pay period')) return;
+    const result = await runService.getRegister(req.params.periodId);
+    if (result.error) return failFromServiceError(res, result);
+
+    const { period, run, lines } = result.data;
+    const header = [
+      'staff_ref', 'staff_name', 'employment_type', 'cpf_eligible',
+      'regular_hours', 'ot_hours', 'ph_hours', 'hourly_rate_used',
+      'gross_from_hours', 'incentive_amount', 'adjustments_total', 'gross_total',
+      'cpf_employee', 'cpf_employer', 'sdl_employer', 'net_payable',
+      'line_status', 'incomplete_reasons',
+    ];
+    const rows = lines.map((entry) =>
+      [
+        entry.externalRef, entry.staffName, entry.employmentType, entry.cpfEligible,
+        entry.regularHours, entry.otHours, entry.phHours, entry.hourlyRateUsed,
+        entry.grossFromHours, entry.incentiveAmount, entry.adjustmentsTotal, entry.grossTotal,
+        entry.cpfEmployee, entry.cpfEmployer, entry.sdl, entry.netPay,
+        entry.lineStatus,
+        (entry.incompleteReasons || []).map((reason) => reason.code).join('; '),
+      ]
+        .map(csvField)
+        .join(',')
+    );
+    const csv = [header.join(','), ...rows].join('\r\n') + '\r\n';
+
+    const filename = `payroll-register_${period.startDate}_to_${period.endDate}_run${run.runNumber}.csv`;
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    // Leading BOM so Excel detects UTF-8 (staff names can be non-ASCII).
+    res.send('\uFEFF' + csv);
+  } catch (err) {
+    next(err);
+  }
+}
+
 module.exports = {
   listPeriods,
   listStaff,
@@ -197,4 +255,6 @@ module.exports = {
   lines,
   line,
   runs,
+  staffVariance,
+  exportCsv,
 };

@@ -38,6 +38,8 @@ router.post(
 router.get('/periods/:periodId/summary', requireAuth, uc003Controller.summary);
 router.get('/periods/:periodId/lines', requireAuth, uc003Controller.lines);
 router.get('/periods/:periodId/runs', requireAuth, uc003Controller.runs);
+router.get('/periods/:periodId/variance', requireAuth, uc003Controller.staffVariance);
+router.get('/periods/:periodId/export.csv', requireAuth, uc003Controller.exportCsv);
 router.get('/lines/:lineId', requireAuth, uc003Controller.line);
 
 router.post('/runs/:runId/void', requireAuth, requireRole('manager'), uc003Controller.voidRun);
