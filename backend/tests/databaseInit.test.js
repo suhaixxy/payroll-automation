@@ -15,8 +15,10 @@ describe('initializeDatabase', () => {
       `SELECT filename FROM schema_migrations ORDER BY filename`
     );
 
+    // 002/003 existed only in the old repo — this repo's migration chain
+    // starts at 001 and continues from 004.
     expect(rows.map((row) => row.filename)).toEqual(
-      expect.arrayContaining(['001_initial_schema.sql', '002_uc001_enhancements.sql', '003_shift_times.sql'])
+      expect.arrayContaining(['001_initial_schema.sql', '004_uc003_staff_dob.sql'])
     );
 
     const { rows: tableRows } = await pool.query(
