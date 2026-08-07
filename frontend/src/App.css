@@ -193,9 +193,9 @@
   --border: rgba(11, 11, 11, 0.1);
   --gridline: #e7e6e2;
 
-  --accent: #2a78d6;
-  --accent-hover: #1c5cab;
-  --accent-wash: #eaf1fb;
+  --accent: #7a0000;
+  --accent-hover: #5f0000;
+  --accent-wash: #fde7e7;
 
   --good: #0ca30c;
   --good-wash: #e8f7e8;
@@ -279,7 +279,7 @@ body {
 }
 
 .page {
-  max-width: 860px;
+  max-width: 1280px;
   margin: 0 auto;
   padding: 2rem 1.5rem 3rem;
 }
@@ -421,11 +421,62 @@ button.secondary:hover:not(:disabled) {
   border: 1px solid rgba(208, 59, 59, 0.25);
 }
 
+/* Inline editor form (adjustments, performance inputs) */
+.inline-editor {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 20px;
+  margin: 12px 0;
+}
+.inline-editor strong {
+  display: block;
+  margin-bottom: 12px;
+  font-size: 0.95rem;
+}
+.inline-editor .field-row {
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+.inline-editor .field-column {
+  flex: 1 1 180px;
+  min-width: 0;
+}
+.inline-editor label {
+  display: block;
+  font-size: 0.8rem;
+  font-weight: 600;
+  margin-bottom: 4px;
+  color: var(--ink-secondary, #555);
+}
+.inline-editor select,
+.inline-editor input[type="text"],
+.inline-editor input[type="number"] {
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-size: 0.9rem;
+  background: #fff;
+}
+.inline-editor select:focus,
+.inline-editor input:focus {
+  outline: 2px solid var(--accent);
+  outline-offset: -1px;
+}
+.inline-editor .button-row {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+}
+
 /* Stat tiles */
 
 .stat-grid {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(5, 1fr);
   gap: 0.85rem;
   margin-bottom: 1.5rem;
 }

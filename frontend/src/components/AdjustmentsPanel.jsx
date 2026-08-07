@@ -178,7 +178,7 @@ function AdjustmentsPanel({ periodId, periodStatus, user, onChanged }) {
       )}
 
       {editorOpen && (
-        <div className="banner">
+        <div className="inline-editor">
           <div style={{ width: '100%' }}>
             <strong>{editing === 'new' ? 'New adjustment' : 'Edit adjustment'}</strong>
             <div className="field-row">

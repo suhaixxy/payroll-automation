@@ -181,7 +181,7 @@ function PerformanceInputsPanel({ periodId, periodStatus, user, resolveStaffId, 
       )}
 
       {editorOpen && (
-        <div className="banner">
+        <div className="inline-editor">
           <div style={{ width: '100%' }}>
             <strong>{editing === 'new' ? 'New performance input' : 'Edit performance input'}</strong>
             <div className="field-row">
@@ -223,7 +223,7 @@ function PerformanceInputsPanel({ periodId, periodStatus, user, resolveStaffId, 
                   id="pi-quantity"
                   type="number"
                   min="0"
-                  step="0.01"
+                  step="1"
                   value={form.quantity}
                   onChange={(event) => setForm({ ...form, quantity: event.target.value })}
                 />
