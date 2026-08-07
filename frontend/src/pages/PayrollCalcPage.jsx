@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
+import { useAuth } from '../context/AuthContext';
 import {
   getAccessToken,
   clearAccessToken,
-  fetchCurrentUser,
   fetchPayrollPeriods,
   calculatePayroll,
   recalculatePayroll,
@@ -18,7 +18,6 @@ import RateSetsPanel from '../components/RateSetsPanel';
 import RunHistoryPanel from '../components/RunHistoryPanel';
 import StaffVariancePanel from '../components/StaffVariancePanel';
 import LineBreakdownModal from '../components/LineBreakdownModal';
-import LoginPanel from '../components/LoginPanel';
 // Shared status contract (UC-003 guide §5.1) — same file the backend uses.
 import payrollStatus from '../../../shared/payrollStatus.json';
 
@@ -33,8 +32,7 @@ const DEFAULT_LINE_QUERY = { search: '', status: '', sort: 'name', dir: 'asc', p
 // period to approval (UC-004). Requires a login — every run is tied to who
 // triggered it.
 function PayrollCalcPage() {
-  const [user, setUser] = useState(null);
-  const [authChecked, setAuthChecked] = useState(false);
+  const { user, signOut } = useAuth();
   const [payPeriods, setPayPeriods] = useState([]);
   const [selectedPeriodId, setSelectedPeriodId] = useState('');
   const [summary, setSummary] = useState(null); // { period, run, variance... }
@@ -57,22 +55,6 @@ function PayrollCalcPage() {
   const [breakdownLineId, setBreakdownLineId] = useState(null); // §7.3 modal
   const [showVariance, setShowVariance] = useState(false); // §7.2 panel
   const [exporting, setExporting] = useState(false); // §7.9 CSV
-
-  // Restore the session from a stored token, if there is one.
-  useEffect(() => {
-    if (!getAccessToken()) {
-      setAuthChecked(true);
-      return;
-    }
-    fetchCurrentUser().then((result) => {
-      if (result.ok) {
-        setUser(result.data.user);
-      } else {
-        clearAccessToken();
-      }
-      setAuthChecked(true);
-    });
-  }, []);
 
   useEffect(() => {
     if (!user) return;
@@ -114,11 +96,12 @@ function PayrollCalcPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user, selectedPeriodId, lineQuery, linesRefresh]);
 
-  // A 401 means the token expired mid-session — drop back to the login card.
+  // A 401 means the token expired mid-session — the global auth context
+  // handles the redirect to /login via its payroll:unauthorized listener.
   function sessionExpired(result) {
     if (result.status === 401) {
       clearAccessToken();
-      setUser(null);
+      signOut();
       return true;
     }
     return false;
@@ -248,15 +231,6 @@ function PayrollCalcPage() {
     setExporting(false);
   }
 
-  function handleLogout() {
-    clearAccessToken();
-    setUser(null);
-    setSummary(null);
-    setLines(null);
-    setLinesMeta(null);
-    setPayPeriods([]);
-  }
-
   const selectedPeriod = payPeriods.find((period) => period.id === selectedPeriodId);
   const periodStatus = selectedPeriod?.status;
   const run = summary?.run;
@@ -271,29 +245,6 @@ function PayrollCalcPage() {
   const totalLines = linesMeta?.total ?? 0;
   const totalPages = Math.max(1, Math.ceil(totalLines / LINES_PER_PAGE));
 
-  if (!authChecked) {
-    return (
-      <div className="page">
-        <p className="muted">Checking session…</p>
-      </div>
-    );
-  }
-
-  if (!user) {
-    return (
-      <div className="page">
-        <div className="page-intro">
-          <h2>Payroll Calculation</h2>
-          <p className="muted">
-            Calculating payroll needs a logged-in account — the amounts here end up in real payments,
-            so every run is tied to who triggered it.
-          </p>
-        </div>
-        <LoginPanel onLoggedIn={setUser} />
-      </div>
-    );
-  }
-
   return (
     <div className="page">
       <div className="page-intro">
@@ -303,12 +254,6 @@ function PayrollCalcPage() {
           hours × rate (OT and public-holiday multipliers from the statutory rate set), full-timer
           incentives from performance inputs, CPF by age band, and employer-borne SDL. Each execution
           is an immutable numbered run; a manager submits the calculated period to approval (UC-004).
-        </p>
-        <p className="muted">
-          Signed in as <strong>{user.name}</strong> ({user.role}) ·{' '}
-          <button type="button" className="login-switch" onClick={handleLogout}>
-            Log out
-          </button>
         </p>
       </div>
 
@@ -351,7 +296,12 @@ function PayrollCalcPage() {
             Submit for Approval
           </button>
         )}
-        {!canCalculate && !canRecalculate && selectedPeriod && (
+        {periodStatus === PAYROLL_STATUS.DRAFT && selectedPeriod && (
+          <span className="muted button-row-caption">
+            This period is <strong>draft</strong> — validate it in Timesheet Validation before calculating payroll.
+          </span>
+        )}
+        {!canCalculate && !canRecalculate && selectedPeriod && periodStatus !== PAYROLL_STATUS.DRAFT && periodStatus !== PAYROLL_STATUS.PENDING_APPROVAL && (
           <span className="muted button-row-caption">
             This period is <strong>{periodStatus.replace(/_/g, ' ')}</strong> — payroll can no longer
             be recalculated here.

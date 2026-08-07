@@ -1,5 +1,8 @@
 import {
   AccountCircleRounded,
+  ApprovalRounded,
+  CalculateRounded,
+  CalendarMonthRounded,
   DashboardRounded,
   DescriptionRounded,
   ExpandLessRounded,
@@ -46,6 +49,10 @@ const paymentLinks = [
 
 const pageTitles = [
   { match: /^\/dashboard$/, title: "Dashboard" },
+  { match: /^\/roster$/, title: "Roster Sync" },
+  { match: /^\/timesheets$/, title: "Timesheet Validation" },
+  { match: /^\/payroll$/, title: "Payroll Calculation" },
+  { match: /^\/approvals$/, title: "Approvals" },
   { match: /^\/payments\/preview$/, title: "Payment Preview" },
   { match: /^\/payments\/review-employees$/, title: "Review Employees" },
   { match: /^\/payments\/[^/]+$/, title: "Payment Batch Details" },
@@ -102,14 +109,10 @@ function Sidebar({ onNavigate }) {
         {isManager && (
           <>
             <SidebarLink icon={<DashboardRounded />} label="Dashboard" path="/dashboard" active={location.pathname === "/dashboard"} onNavigate={onNavigate} />
-            <ListItemButton className="sidebar-link sidebar-link-unavailable" disabled>
-              <ListItemIcon><GroupsRounded /></ListItemIcon>
-              <ListItemText primary="Employees" secondary="Not available" />
-            </ListItemButton>
-            <ListItemButton className="sidebar-link sidebar-link-unavailable" disabled>
-              <ListItemIcon><TodayRounded /></ListItemIcon>
-              <ListItemText primary="Pay Periods" secondary="Not available" />
-            </ListItemButton>
+            <SidebarLink icon={<GroupsRounded />} label="Roster" path="/roster" active={location.pathname === "/roster"} onNavigate={onNavigate} />
+            <SidebarLink icon={<TodayRounded />} label="Timesheets" path="/timesheets" active={location.pathname === "/timesheets"} onNavigate={onNavigate} />
+            <SidebarLink icon={<CalculateRounded />} label="Payroll Calculation" path="/payroll" active={location.pathname === "/payroll"} onNavigate={onNavigate} />
+            <SidebarLink icon={<ApprovalRounded />} label="Approvals" path="/approvals" active={location.pathname === "/approvals"} onNavigate={onNavigate} />
             <ListItemButton
               className={`sidebar-link sidebar-parent-link${isPaymentRoute ? " sidebar-parent-active" : ""}`}
               onClick={() => setPaymentsOpen((open) => !open)}
