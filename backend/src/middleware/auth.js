@@ -18,7 +18,9 @@ function requireAuth(req, res, next) {
   }
 
   try {
-    req.user = jwt.verify(token, process.env.APP_SECRET);
+    req.user = jwt.verify(token, process.env.JWT_SECRET);
+    // Dev's JWT uses "sub" for the user ID; UC-003 code expects req.user.id.
+    if (!req.user.id && req.user.sub) req.user.id = req.user.sub;
     return next();
   } catch (err) {
     return res.status(401).json({ error: 'INVALID_TOKEN', message: 'Session is invalid or expired — log in again.' });

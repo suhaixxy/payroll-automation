@@ -7,6 +7,9 @@
 -- pay_rate STAYS — hourly rates are still read from it (ownership pending,
 -- guide §3.3).
 
-DROP TABLE IF EXISTS payroll_line;
+-- payroll_line is kept: UC-005's payment_batch_item and payslip tables
+-- have foreign keys referencing it. Drop it once UC-005 migrates to
+-- payroll_lines (plural) or the team agrees on a shared approach.
+-- DROP TABLE IF EXISTS payroll_line;
 DROP TABLE IF EXISTS performance_input;
 DROP TABLE IF EXISTS incentive_scheme;

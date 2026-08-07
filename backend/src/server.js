@@ -7,8 +7,6 @@ const rosterSyncScheduler = require("./jobs/rosterSyncScheduler");
 const payPeriodService = require("./services/payPeriodService");
 const { initializeDatabase } = require("./db/initializeDatabase");
 const { waitForDatabase } = require("./db/waitForDb");
-const { sequelize, syncUc003Tables } = require("./models");
-
 const PORT = process.env.PORT || 5000;
 
 async function start() {
@@ -16,11 +14,9 @@ async function start() {
   // container is "running" before Postgres accepts connections — poll first.
   await waitForDatabase({ log: (message) => console.log(`[server] ${message}`) });
 
-  // Apply any pending SQL migrations, then let Sequelize create the
-  // UC-003-owned tables (plain sync — never force/alter, so it can only
-  // add missing tables, never touch existing ones).
+  // Apply any pending SQL migrations (all tables are migration-owned,
+  // including UC-003's — no Sequelize sync needed).
   await initializeDatabase();
-  await syncUc003Tables();
 
   // Also doubles as a startup DB connectivity check — if Postgres isn't
   // running, this fails loudly here instead of on the first API request.
