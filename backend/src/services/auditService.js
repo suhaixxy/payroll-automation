@@ -1,24 +1,89 @@
-// Writes one row per significant action to the shared audit_log table
-// (created by migration 001). Append-only: nothing in the codebase may
-// UPDATE or DELETE audit rows.
+const { AuditLog } = require("../models");
 
-const { pool } = require('../config/database');
+const safeDetails = (details = {}) => {
+  const blockedKeys = new Set([
+    "password",
+    "passwordHash",
+    "password_hash",
+    "token",
+    "jwt",
+    "bank_account_no",
+  ]);
 
-/**
- * Records who did what to which entity.
- * @param {object} entry
- * @param {string} entry.entityType - e.g. 'pay_period', 'payroll_line'.
- * @param {string} entry.entityId - UUID of the affected row.
- * @param {string} entry.action - e.g. 'payroll_calculated'.
- * @param {string} entry.actor - email of the user (or 'system').
- * @param {object} [entry.detail] - free-form JSON context (before/after, totals).
- */
-async function logAction({ entityType, entityId, action, actor, detail }) {
-  await pool.query(
-    `INSERT INTO audit_log (entity_type, entity_id, action, actor, detail)
-     VALUES ($1, $2, $3, $4, $5)`,
-    [entityType, entityId, action, actor, detail ? JSON.stringify(detail) : null]
+  return Object.fromEntries(
+    Object.entries(details || {}).filter(([key]) => !blockedKeys.has(key))
   );
-}
+};
 
-module.exports = { logAction };
+// ==========================================================
+// UC-005 / shared audit API
+// ==========================================================
+
+const record = async ({
+  user = null,
+  action,
+  entityType,
+  entityId = null,
+  ipAddress = null,
+  details = {},
+}) =>
+  AuditLog.create({
+    user_id: user?.id || null,
+    user_role: user?.role || null,
+    action,
+    entity_type: entityType,
+    entity_id: entityId,
+    actor: user?.email || "anonymous",
+    ip_address: ipAddress,
+    details: safeDetails(details),
+  });
+
+// ==========================================================
+// Compatibility API used by UC-001
+// ==========================================================
+
+const logAction = async ({
+  entityType,
+  entityId,
+  action,
+  actor,
+  detail,
+}) =>
+  AuditLog.create({
+    user_id: null,
+    user_role: null,
+    action,
+    entity_type: entityType,
+    entity_id: entityId,
+    actor: actor || "system",
+    ip_address: null,
+    details: safeDetails(detail || {}),
+  });
+
+const getHistory = async (entityType, entityId, limit = 10) => {
+  const rows = await AuditLog.findAll({
+    where: {
+      entity_type: entityType,
+      entity_id: entityId,
+    },
+    order: [["created_at", "DESC"]],
+    limit,
+  });
+
+  return rows.map((row) => {
+    const values = row.get({ plain: true });
+
+    return {
+      action: values.action,
+      actor: values.actor,
+      detail: values.details,
+      createdAt: values.created_at || values.createdAt,
+    };
+  });
+};
+
+module.exports = {
+  record,
+  logAction,
+  getHistory,
+};

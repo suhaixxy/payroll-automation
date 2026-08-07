@@ -1,14 +1,13 @@
 // .env lives at the payroll-automation project root, one level above
 // backend/ — must load before anything below reads process.env.
-require('dotenv').config({ path: require('path').resolve(__dirname, '../../.env') });
+require("dotenv").config({ path: require("path").resolve(__dirname, "../../.env") });
 
-const app = require('./app');
-const rosterSyncScheduler = require('./jobs/rosterSyncScheduler');
-const payPeriodService = require('./services/payPeriodService');
-const { initializeDatabase } = require('./db/initializeDatabase');
-const { waitForDatabase } = require('./db/waitForDb');
-const { syncUc003Tables } = require('./models');
-const { ensureUc003DemoData } = require('./services/uc003SeedService');
+const app = require("./app");
+const rosterSyncScheduler = require("./jobs/rosterSyncScheduler");
+const payPeriodService = require("./services/payPeriodService");
+const { initializeDatabase } = require("./db/initializeDatabase");
+const { waitForDatabase } = require("./db/waitForDb");
+const { sequelize, syncUc003Tables } = require("./models");
 
 const PORT = process.env.PORT || 5000;
 
@@ -25,8 +24,8 @@ async function start() {
 
   // Also doubles as a startup DB connectivity check — if Postgres isn't
   // running, this fails loudly here instead of on the first API request.
-  await payPeriodService.ensurePayPeriodsSeeded();
-  await ensureUc003DemoData();
+  const result = await payPeriodService.ensurePayPeriodsSeeded();
+  console.log(`[startup] ${result.message}`);
 
   app.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);
@@ -37,7 +36,6 @@ async function start() {
 
 start().catch((err) => {
   console.error(`[server] Failed to start: ${err.message}`);
-  console.error('[server] Is Docker Desktop running? Try: npm run db:up');
+  console.error("[server] Is Docker Desktop running? Try: npm run db:up");
   process.exit(1);
 });
-

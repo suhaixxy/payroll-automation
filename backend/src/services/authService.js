@@ -1,52 +1,73 @@
-// Auth business logic (Lab 5a pattern): bcrypt for password hashing,
-// jsonwebtoken for the session token. Controllers translate the return
-// values into HTTP responses — no res/req in here.
+const bcrypt = require("bcrypt");
+const jwt = require("jsonwebtoken");
+const { User } = require("../models");
+const { jwtSecret, jwtExpiresIn } = require("../config/auth");
+const auditService = require("./auditService");
+const AppError = require("../utils/AppError");
 
-const bcrypt = require('bcrypt');
-const jwt = require('jsonwebtoken');
-const User = require('../models/User');
+const publicUser = (user) => ({
+    id: user.id,
+    fullName: user.full_name,
+    email: user.email,
+    role: user.role,
+    staffId: user.staff_id,
+});
 
-// What goes inside the JWT (and back to the client). Never include the
-// password hash.
-function toTokenPayload(user) {
-  return { id: user.id, email: user.email, name: user.name, role: user.role };
-}
+exports.login = async ({ email, password, ipAddress }) => {
+    const user = await User.findOne({ where: { email } });
+    const matches = user ? await bcrypt.compare(password, user.password_hash) : false;
 
-/**
- * Creates a login account with a bcrypt-hashed password.
- * Returns { user } or { error: 'EMAIL_TAKEN' }.
- */
-async function registerUser({ name, email, password, role }) {
-  const existing = await User.findOne({ where: { email } });
-  if (existing) {
-    return { error: 'EMAIL_TAKEN' };
-  }
+    if (!user || !matches) {
+        await auditService.record({
+            user: user ? publicUser(user) : null,
+            action: "LOGIN_FAILURE",
+            entityType: "user",
+            entityId: user?.id || null,
+            ipAddress,
+            details: { reason: "invalid_credentials" },
+        });
+        throw new AppError(401, "INVALID_CREDENTIALS", "The email or password is incorrect.");
+    }
 
-  const hashed = await bcrypt.hash(password, 10);
-  const user = await User.create({ name, email, password: hashed, role });
-  return { user: toTokenPayload(user) };
-}
+    if (user.status !== "active") {
+        await auditService.record({
+            user: publicUser(user),
+            action: "LOGIN_FAILURE",
+            entityType: "user",
+            entityId: user.id,
+            ipAddress,
+            details: { reason: "account_disabled" },
+        });
+        throw new AppError(403, "ACCOUNT_DISABLED", "This account is disabled.");
+    }
+    if (!jwtSecret) throw new AppError(500, "AUTH_CONFIGURATION_ERROR", "Authentication is not configured.");
 
-/**
- * Verifies credentials and signs a JWT.
- * Returns { accessToken, user } or { error: 'INVALID_CREDENTIALS' }.
- * Wrong email and wrong password give the same error on purpose, so the
- * response doesn't reveal which emails have accounts.
- */
-async function loginUser({ email, password }) {
-  const user = await User.findOne({ where: { email } });
-  if (!user) {
-    return { error: 'INVALID_CREDENTIALS' };
-  }
+    const accessToken = jwt.sign(
+        { role: user.role, staffId: user.staff_id || null },
+        jwtSecret,
+        { subject: user.id, expiresIn: jwtExpiresIn },
+    );
+    user.last_login_at = new Date();
+    await user.save();
+    await auditService.record({
+        user: publicUser(user),
+        action: "LOGIN_SUCCESS",
+        entityType: "user",
+        entityId: user.id,
+        ipAddress,
+    });
 
-  const passwordMatches = await bcrypt.compare(password, user.password);
-  if (!passwordMatches) {
-    return { error: 'INVALID_CREDENTIALS' };
-  }
+    return { accessToken, user: publicUser(user) };
+};
 
-  const payload = toTokenPayload(user);
-  const accessToken = jwt.sign(payload, process.env.APP_SECRET, { expiresIn: '8h' });
-  return { accessToken, user: payload };
-}
+exports.getCurrentUser = async (authenticatedUser) => authenticatedUser;
 
-module.exports = { registerUser, loginUser };
+exports.logout = async ({ user, ipAddress }) => {
+    await auditService.record({
+        user,
+        action: "LOGOUT",
+        entityType: "user",
+        entityId: user.id,
+        ipAddress,
+    });
+};

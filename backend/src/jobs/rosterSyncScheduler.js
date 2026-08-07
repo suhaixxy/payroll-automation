@@ -1,10 +1,24 @@
-// UC-001's roster sync scheduler. The original implementation was lost in
-// the port from the old repo — this no-op stub keeps the server bootable
-// until the UC-001 owner restores the real scheduler. It must not be
-// extended by UC-003 work.
+// Runs the UC-001 roster import once per day at midnight without adding a
+// cron dependency. The slot set prevents repeated imports during midnight.
+const rosterSyncService = require("../services/rosterSyncService");
 
-function start() {
-  console.log('[rosterSyncScheduler] stub — roster sync is not scheduled (UC-001 implementation pending).');
+const CHECK_INTERVAL_MS = 60 * 1000;
+const completedDates = new Set();
+
+function runIfDue(now = new Date()) {
+  if (now.getHours() !== 0 || now.getMinutes() !== 0) return;
+
+  const dateKey = now.toISOString().slice(0, 10);
+  if (completedDates.has(dateKey)) return;
+
+  completedDates.add(dateKey);
+  rosterSyncService.runRosterSync(undefined, "scheduler").catch((error) => {
+    console.error("[rosterSyncScheduler] Scheduled sync failed:", error.message);
+  });
 }
 
-module.exports = { start };
+function start() {
+  setInterval(() => runIfDue(), CHECK_INTERVAL_MS);
+}
+
+module.exports = { start, runIfDue };

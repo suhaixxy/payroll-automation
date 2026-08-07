@@ -1,25 +1,21 @@
-// A login account for a system operator (accounting staff or a manager).
-// NOT the workforce being paid — that's the staff table. Users log in;
-// staff are payroll data and never log in.
-
-const { DataTypes } = require('sequelize');
-const { sequelize } = require('../config/sequelize');
-
-const User = sequelize.define(
-  'User',
-  {
+module.exports = (sequelize, DataTypes) => sequelize.define("User", {
     id: { type: DataTypes.UUID, defaultValue: DataTypes.UUIDV4, primaryKey: true },
-    name: { type: DataTypes.STRING, allowNull: false },
-    email: { type: DataTypes.STRING, allowNull: false, unique: true },
-    // Always a bcrypt hash — authService is the only place that writes it.
-    password: { type: DataTypes.STRING, allowNull: false },
+    full_name: { type: DataTypes.STRING(150), allowNull: false },
+    email: { type: DataTypes.STRING(255), allowNull: false, unique: true },
+    password_hash: { type: DataTypes.STRING(255), allowNull: false },
     role: {
-      type: DataTypes.ENUM('accounting', 'manager'),
-      allowNull: false,
-      defaultValue: 'accounting',
+        type: DataTypes.ENUM("manager", "employee"),
+        allowNull: false,
     },
-  },
-  { tableName: 'users' }
-);
-
-module.exports = User;
+    staff_id: { type: DataTypes.UUID, allowNull: true, unique: true },
+    status: {
+        type: DataTypes.ENUM("active", "disabled"),
+        allowNull: false,
+        defaultValue: "active",
+    },
+    last_login_at: { type: DataTypes.DATE, allowNull: true },
+}, {
+    tableName: "user_account",
+    underscored: true,
+    timestamps: true,
+});
