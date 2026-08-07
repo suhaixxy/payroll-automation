@@ -1,52 +1,122 @@
-// Small helper functions for talking to the roster sync backend (UC-001).
+import axios from "axios";
 
-const BASE_URL = import.meta.env.VITE_BACKEND_URL || "http://localhost:5000";
+const BASE_URL =
+  import.meta.env.VITE_BACKEND_URL ||
+  import.meta.env.VITE_API_URL ||
+  "http://localhost:5000";
+
+const TOKEN_KEY = "payrollAccessToken";
+
+const API_URL = `${BASE_URL.replace(/\/$/, "")}/api`;
+
+// ==========================================================
+// Axios client
+// Used by UC-005 authentication, payment, payslip and staff APIs
+// ==========================================================
+
+const apiClient = axios.create({
+  baseURL: API_URL,
+  timeout: 15000,
+  headers: {
+    Accept: "application/json",
+  },
+});
+
+export const getAccessToken = () => localStorage.getItem(TOKEN_KEY);
+
+export const setAccessToken = (token) => {
+  localStorage.setItem(TOKEN_KEY, token);
+};
+
+export const clearAccessToken = () => {
+  localStorage.removeItem(TOKEN_KEY);
+};
+
+apiClient.interceptors.request.use((config) => {
+  const token = getAccessToken();
+
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`;
+  }
+
+  return config;
+});
+
+apiClient.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    if (error.response?.status === 401 && getAccessToken()) {
+      clearAccessToken();
+      window.dispatchEvent(new Event("payroll:unauthorized"));
+    }
+
+    return Promise.reject(error);
+  }
+);
+
+// ==========================================================
+// Fetch helpers
+// Preserved for existing/shared group frontend code
+// ==========================================================
 
 async function apiGet(path) {
-  const response = await fetch(`${BASE_URL}${path}`);
+  const headers = {};
+  const token = getAccessToken();
+
+  if (token) {
+    headers.Authorization = `Bearer ${token}`;
+  }
+
+  const response = await fetch(`${BASE_URL}${path}`, {
+    headers,
+  });
+
   if (!response.ok) {
     throw new Error(`API GET ${path} failed: ${response.status}`);
   }
+
   return response.json();
 }
 
-async function apiPost(path, body) {
+async function apiPost(path, body, { allowStatuses = [] } = {}) {
+  const headers = {
+    "Content-Type": "application/json",
+  };
+
+  const token = getAccessToken();
+
+  if (token) {
+    headers.Authorization = `Bearer ${token}`;
+  }
+
   const response = await fetch(`${BASE_URL}${path}`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers,
     body: JSON.stringify(body),
   });
-  if (!response.ok) {
+
+  const payload = await response.json();
+
+  if (!response.ok && !allowStatuses.includes(response.status)) {
     throw new Error(`API POST ${path} failed: ${response.status}`);
   }
-  return response.json();
+
+  return payload;
 }
 
-// ── Auth + payroll helpers (UC-003) ────────────────────────────────────
+// ==========================================================
+// UC-003 payroll helpers
 // The payroll endpoints require a login, so these helpers attach the JWT
 // from localStorage as a Bearer token, and return { ok, status, data } so
 // pages can branch on 401/404/409 instead of only seeing parsed JSON.
-
-const TOKEN_KEY = 'accessToken';
-
-export function getAccessToken() {
-  return localStorage.getItem(TOKEN_KEY);
-}
-
-export function storeAccessToken(token) {
-  localStorage.setItem(TOKEN_KEY, token);
-}
-
-export function clearAccessToken() {
-  localStorage.removeItem(TOKEN_KEY);
-}
+// ==========================================================
 
 async function authedFetch(path, options = {}) {
   const token = getAccessToken();
-  const response = await fetch(path, {
+  const response = await fetch(`${BASE_URL}${path}`, {
     ...options,
     headers: {
-      'Content-Type': 'application/json',
+      "Content-Type": "application/json",
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
     },
   });
@@ -54,39 +124,27 @@ async function authedFetch(path, options = {}) {
   return { ok: response.ok, status: response.status, data };
 }
 
-export function registerUser(body) {
-  return authedFetch('/api/user/register', { method: 'POST', body: JSON.stringify(body) });
-}
-
-export function loginUser(body) {
-  return authedFetch('/api/user/login', { method: 'POST', body: JSON.stringify(body) });
-}
-
-export function fetchCurrentUser() {
-  return authedFetch('/api/user/auth');
-}
-
 // UC-003 (guide §6): the /api/uc003 calculation surface. Responses use the
 // standard { success, data, meta } envelope — callers read body.data.
 export function fetchPayrollPeriods() {
-  return authedFetch('/api/uc003/periods');
+  return authedFetch("/api/uc003/periods");
 }
 
 export function calculatePayroll(periodId) {
   return authedFetch(`/api/uc003/periods/${encodeURIComponent(periodId)}/calculate`, {
-    method: 'POST',
+    method: "POST",
   });
 }
 
 export function recalculatePayroll(periodId) {
   return authedFetch(`/api/uc003/periods/${encodeURIComponent(periodId)}/recalculate`, {
-    method: 'POST',
+    method: "POST",
   });
 }
 
 export function submitForApproval(periodId) {
   return authedFetch(`/api/uc003/periods/${encodeURIComponent(periodId)}/submit-approval`, {
-    method: 'POST',
+    method: "POST",
   });
 }
 
@@ -99,9 +157,9 @@ export function fetchPayrollSummary(periodId) {
 export function fetchPayrollLines(periodId, params = {}) {
   const query = new URLSearchParams();
   for (const [key, value] of Object.entries(params)) {
-    if (value !== undefined && value !== null && value !== '') query.set(key, value);
+    if (value !== undefined && value !== null && value !== "") query.set(key, value);
   }
-  if (!query.has('limit')) query.set('limit', '20');
+  if (!query.has("limit")) query.set("limit", "20");
   return authedFetch(`/api/uc003/periods/${encodeURIComponent(periodId)}/lines?${query}`);
 }
 
@@ -116,7 +174,7 @@ export function fetchRunHistory(periodId) {
 
 export function voidCalculationRun(runId, reason) {
   return authedFetch(`/api/uc003/runs/${encodeURIComponent(runId)}/void`, {
-    method: 'POST',
+    method: "POST",
     body: JSON.stringify({ reason }),
   });
 }
@@ -132,7 +190,7 @@ export function fetchStaffVariance(periodId) {
 export async function downloadPayrollRegister(periodId) {
   const token = getAccessToken();
   const response = await fetch(
-    `/api/uc003/periods/${encodeURIComponent(periodId)}/export.csv`,
+    `${BASE_URL}/api/uc003/periods/${encodeURIComponent(periodId)}/export.csv`,
     { headers: token ? { Authorization: `Bearer ${token}` } : {} }
   );
   if (!response.ok) {
@@ -140,10 +198,10 @@ export async function downloadPayrollRegister(periodId) {
     return { ok: false, status: response.status, data };
   }
   const blob = await response.blob();
-  const disposition = response.headers.get('Content-Disposition') || '';
-  const filename = disposition.match(/filename="([^"]+)"/)?.[1] || 'payroll-register.csv';
+  const disposition = response.headers.get("Content-Disposition") || "";
+  const filename = disposition.match(/filename="([^"]+)"/)?.[1] || "payroll-register.csv";
   const url = URL.createObjectURL(blob);
-  const anchor = document.createElement('a');
+  const anchor = document.createElement("a");
   anchor.href = url;
   anchor.download = filename;
   document.body.appendChild(anchor);
@@ -155,7 +213,7 @@ export async function downloadPayrollRegister(periodId) {
 
 // Staff options for the adjustment / performance-input forms (read-only).
 export function fetchUc003Staff() {
-  return authedFetch('/api/uc003/staff');
+  return authedFetch("/api/uc003/staff");
 }
 
 // Payroll adjustments — full CRUD (manager-only mutations, enforced
@@ -165,18 +223,18 @@ export function fetchAdjustments(periodId) {
 }
 
 export function createAdjustment(body) {
-  return authedFetch('/api/uc003/adjustments', { method: 'POST', body: JSON.stringify(body) });
+  return authedFetch("/api/uc003/adjustments", { method: "POST", body: JSON.stringify(body) });
 }
 
 export function updateAdjustment(id, body) {
   return authedFetch(`/api/uc003/adjustments/${encodeURIComponent(id)}`, {
-    method: 'PATCH',
+    method: "PATCH",
     body: JSON.stringify(body),
   });
 }
 
 export function deleteAdjustment(id) {
-  return authedFetch(`/api/uc003/adjustments/${encodeURIComponent(id)}`, { method: 'DELETE' });
+  return authedFetch(`/api/uc003/adjustments/${encodeURIComponent(id)}`, { method: "DELETE" });
 }
 
 // Performance inputs — full CRUD (manager-only mutations, enforced
@@ -187,28 +245,30 @@ export function fetchPerformanceInputs(periodId) {
 }
 
 export function createPerformanceInput(body) {
-  return authedFetch('/api/uc003/performance-inputs', { method: 'POST', body: JSON.stringify(body) });
+  return authedFetch("/api/uc003/performance-inputs", { method: "POST", body: JSON.stringify(body) });
 }
 
 export function updatePerformanceInput(id, body) {
   return authedFetch(`/api/uc003/performance-inputs/${encodeURIComponent(id)}`, {
-    method: 'PATCH',
+    method: "PATCH",
     body: JSON.stringify(body),
   });
 }
 
 export function deletePerformanceInput(id) {
-  return authedFetch(`/api/uc003/performance-inputs/${encodeURIComponent(id)}`, { method: 'DELETE' });
+  return authedFetch(`/api/uc003/performance-inputs/${encodeURIComponent(id)}`, { method: "DELETE" });
 }
 
 // Statutory rate sets — read-only in the UI; a new version supersedes the
 // old one via POST (manager, no UI yet per the guide).
 export function fetchRateSets() {
-  return authedFetch('/api/uc003/rate-sets');
+  return authedFetch("/api/uc003/rate-sets");
 }
 
 export function fetchRateSet(id) {
   return authedFetch(`/api/uc003/rate-sets/${encodeURIComponent(id)}`);
 }
 
-export { apiGet, apiPost };
+export { TOKEN_KEY, apiGet, apiPost };
+
+export default apiClient;

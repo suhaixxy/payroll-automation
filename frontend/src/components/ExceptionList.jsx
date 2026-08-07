@@ -1,29 +1,16 @@
-import React from 'react';
-
-// Shows roster rows that need attention — either an unknown/inactive staff
-// record (variant="unmatched") or a row whose clock-in/out couldn't be read
-// (variant="invalidTime"). Same shape, different problem for accounting
-// staff to resolve, so they're kept visually distinct.
-function ExceptionList({ items, variant = 'unmatched' }) {
-  const isInvalidTime = variant === 'invalidTime';
-  const emptyMessage = isInvalidTime
-    ? 'No data issues — every roster row had a readable clock-in/clock-out time.'
-    : 'No unmatched entries — every roster row matched an active staff record.';
-
-  if (!items || items.length === 0) {
-    return <p className="empty-state">{emptyMessage}</p>;
+function ExceptionList({ items, variant = "unmatched" }) {
+  const invalidTime = variant === "invalidTime";
+  if (!items?.length) {
+    return <p className="roster-empty">{invalidTime ? "No data issues found." : "No unmatched entries found."}</p>;
   }
 
   return (
-    <ul className="exception-list">
+    <ul className="roster-exception-list">
       {items.map((entry, index) => (
-        <li key={index} className={`exception-item${isInvalidTime ? ' exception-item-critical' : ''}`}>
-          <span className={`badge ${isInvalidTime ? 'badge-critical' : 'badge-warning'}`}>
-            <span className="badge-dot" />
-            {isInvalidTime ? 'Data Issue' : 'Unmatched'}
-          </span>
-          <span className="exception-name">{entry.rosterRawName}</span>
-          <span className="exception-meta">{entry.date}{!isInvalidTime ? ` · ${entry.hours}h` : ''}</span>
+        <li key={`${entry.rosterRawName}-${entry.date}-${index}`} className={invalidTime ? "roster-critical" : "roster-unmatched"}>
+          <span>{invalidTime ? "Data issue" : "Unmatched"}</span>
+          <strong>{entry.rosterRawName}</strong>
+          <small>{entry.date}{invalidTime ? "" : ` · ${entry.hours}h`}</small>
         </li>
       ))}
     </ul>

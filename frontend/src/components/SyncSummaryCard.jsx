@@ -1,30 +1,14 @@
-import React from 'react';
-
-// Shows the sync summary as a row of stat tiles, e.g. "47 staff synced, 312 total hours".
 function SyncSummaryCard({ summary }) {
-  if (!summary) return null;
+  if (!summary || !summary.success) return null;
 
-  const lastSynced = summary.syncedAt ? new Date(summary.syncedAt).toLocaleString() : '—';
-  const hasUnmatched = summary.unmatchedCount > 0;
+  const lastSynced = summary.syncedAt ? new Date(summary.syncedAt).toLocaleString() : "—";
 
   return (
-    <div className="stat-grid">
-      <div className="stat-tile">
-        <p className="stat-label">Staff Synced</p>
-        <p className="stat-value">{summary.staffSynced}</p>
-      </div>
-      <div className="stat-tile">
-        <p className="stat-label">Total Hours</p>
-        <p className="stat-value">{summary.totalHours}</p>
-      </div>
-      <div className="stat-tile">
-        <p className="stat-label">Unmatched</p>
-        <p className={`stat-value${hasUnmatched ? ' stat-warning' : ''}`}>{summary.unmatchedCount}</p>
-      </div>
-      <div className="stat-tile">
-        <p className="stat-label">Last Synced</p>
-        <p className="stat-value stat-value-time">{lastSynced}</p>
-      </div>
+    <div className="roster-stat-grid">
+      <div className="roster-stat-tile"><p>Staff synced</p><strong>{summary.staffSynced}</strong></div>
+      <div className="roster-stat-tile"><p>Total hours</p><strong>{summary.totalHours}</strong></div>
+      <div className="roster-stat-tile"><p>Unmatched</p><strong className={summary.unmatchedCount ? "roster-warning" : ""}>{summary.unmatchedCount}</strong></div>
+      <div className="roster-stat-tile"><p>Last synced</p><strong className="roster-time">{lastSynced}</strong></div>
     </div>
   );
 }
