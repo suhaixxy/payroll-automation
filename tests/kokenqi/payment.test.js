@@ -1,10 +1,10 @@
 const request = require("supertest");
 const crypto = require("crypto");
-const app = require("../src/app");
+const app = require("../../backend/src/app");
 const {
     sequelize, PayPeriod, Staff, PayrollLine, Approval,
     PaymentBatch, PaymentBatchItem, Payslip, AuditLog, User,
-} = require("../src/models");
+} = require("../../backend/src/models");
 
 let managerToken;
 let managerId;

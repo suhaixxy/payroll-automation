@@ -1,6 +1,6 @@
 const request = require("supertest");
-const app = require("../src/app");
-const { sequelize, AuditLog } = require("../src/models");
+const app = require("../../backend/src/app");
+const { sequelize, AuditLog } = require("../../backend/src/models");
 
 describe("Authentication API", () => {
     test("successful login returns a JWT and safe user profile", async () => {
