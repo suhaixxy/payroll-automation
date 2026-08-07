@@ -1,9 +1,30 @@
-// STUB: returns fake data until real HRMS API access is set up.
-// Real implementation would authenticate and push payroll records to the actual HRMS system.
+const crypto = require("crypto");
+const hrmsConfig = require("../config/hrms");
 
-async function syncToHrms(paymentBatch) {
-  console.log("STUB: pretending to sync payment batch to HRMS", paymentBatch.id);
-  return { success: true, hrmsReference: `FAKE-HRMS-${Date.now()}` };
-}
+exports.sync = async (payload) => {
+    if (hrmsConfig.mode !== "mock") {
+        return {
+            success: false,
+            externalReference: null,
+            errorCode: "HRMS_MODE_UNAVAILABLE",
+            errorMessage: "Configured HRMS adapter is unavailable."
+        };
+    }
 
-module.exports = { syncToHrms };
+    if (hrmsConfig.simulateFailure()) {
+        return {
+            success: false,
+            externalReference: null,
+            errorCode: "MOCK_HRMS_FAILURE",
+            errorMessage: "Mock HRMS synchronisation failed."
+        };
+    }
+
+    return {
+        success: true,
+        externalReference: `HRMS-${crypto.randomBytes(6).toString("hex").toUpperCase()}`,
+        errorCode: null,
+        errorMessage: null,
+        acceptedRecords: payload.payrollRecords.length,
+    };
+};

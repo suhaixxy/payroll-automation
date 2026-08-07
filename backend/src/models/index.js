@@ -1,26 +1,48 @@
-// Central export for the Sequelize models that exist so far (UC-003 + auth).
-// Teammates: require your model here as you build your use case, and it
-// will be created by the same startup sync.
-//
-// The UC-003 run tables (calculation_runs, payroll_lines, performance_inputs,
-// statutory_rate_sets, cpf_rate_bands, uc003_audit_log) are migration-owned
-// and accessed with raw SQL — they deliberately have no models here.
-//
-// syncUc003Tables uses PLAIN sequelize.sync(): it only CREATEs tables that
-// don't exist yet. Never change it to { force: true } or { alter: true } —
-// those can drop or mangle the UC-001 tables and everyone's data.
+const { DataTypes } = require("sequelize");
+const { sequelize } = require("../config/database");
 
-const { sequelize } = require('../config/sequelize');
-const User = require('./User');
-const PayRate = require('./PayRate');
-
-async function syncUc003Tables() {
-  await sequelize.sync();
-}
-
-module.exports = {
-  sequelize,
-  User,
-  PayRate,
-  syncUc003Tables,
+const db = {
+    sequelize,
+    User: require("./User")(sequelize, DataTypes),
+    Staff: require("./Staff")(sequelize, DataTypes),
+    PayPeriod: require("./PayPeriod")(sequelize, DataTypes),
+    PayrollLine: require("./PayrollLine")(sequelize, DataTypes),
+    Approval: require("./Approval")(sequelize, DataTypes),
+    AuditLog: require("./AuditLog")(sequelize, DataTypes),
+    PaymentBatch: require("./PaymentBatch")(sequelize, DataTypes),
+    PaymentBatchItem: require("./PaymentBatchItem")(sequelize, DataTypes),
+    Payslip: require("./Payslip")(sequelize, DataTypes),
 };
+
+db.User.belongsTo(db.Staff, { foreignKey: "staff_id", as: "staff" });
+db.Staff.hasOne(db.User, { foreignKey: "staff_id", as: "user" });
+
+db.PayPeriod.hasMany(db.PayrollLine, { foreignKey: "pay_period_id", as: "payrollLines" });
+db.PayrollLine.belongsTo(db.PayPeriod, { foreignKey: "pay_period_id", as: "payPeriod" });
+db.Staff.hasMany(db.PayrollLine, { foreignKey: "staff_id", as: "payrollLines" });
+db.PayrollLine.belongsTo(db.Staff, { foreignKey: "staff_id", as: "staff" });
+
+db.PayPeriod.hasMany(db.Approval, { foreignKey: "pay_period_id", as: "approvals" });
+db.Approval.belongsTo(db.PayPeriod, { foreignKey: "pay_period_id", as: "payPeriod" });
+
+db.PayPeriod.hasMany(db.PaymentBatch, { foreignKey: "pay_period_id", as: "paymentBatches" });
+db.PaymentBatch.belongsTo(db.PayPeriod, { foreignKey: "pay_period_id", as: "payPeriod" });
+db.User.hasMany(db.PaymentBatch, { foreignKey: "generated_by", as: "generatedPaymentBatches" });
+db.PaymentBatch.belongsTo(db.User, { foreignKey: "generated_by", as: "generator" });
+
+db.PaymentBatch.hasMany(db.PaymentBatchItem, { foreignKey: "payment_batch_id", as: "items" });
+db.PaymentBatchItem.belongsTo(db.PaymentBatch, { foreignKey: "payment_batch_id", as: "paymentBatch" });
+db.PaymentBatchItem.belongsTo(db.PayrollLine, { foreignKey: "payroll_line_id", as: "payrollLine" });
+db.PaymentBatchItem.belongsTo(db.Staff, { foreignKey: "staff_id", as: "staff" });
+
+db.PaymentBatch.hasMany(db.Payslip, { foreignKey: "payment_batch_id", as: "payslips" });
+db.Payslip.belongsTo(db.PaymentBatch, { foreignKey: "payment_batch_id", as: "paymentBatch" });
+db.Payslip.hasOne(db.PaymentBatchItem, { foreignKey: "payroll_line_id", sourceKey: "payroll_line_id", as: "paymentItem" });
+db.Payslip.belongsTo(db.PayrollLine, { foreignKey: "payroll_line_id", as: "payrollLine" });
+db.Staff.hasMany(db.Payslip, { foreignKey: "staff_id", as: "payslips" });
+db.Payslip.belongsTo(db.Staff, { foreignKey: "staff_id", as: "staff" });
+
+db.User.hasMany(db.AuditLog, { foreignKey: "user_id", as: "auditLogs" });
+db.AuditLog.belongsTo(db.User, { foreignKey: "user_id", as: "user" });
+
+module.exports = db;

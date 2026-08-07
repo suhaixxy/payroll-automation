@@ -1,8 +1,11 @@
+// Shared: routes for pay periods (used by all UCs).
+
 const express = require("express");
+const payPeriodController = require("../controllers/payPeriodController");
+
 const router = express.Router();
 
-router.get("/", (req, res) => {
-  res.json({ message: "Pay Periods route placeholder" });
-});
+router.get("/", payPeriodController.listPayPeriods);
+router.get("/:id", payPeriodController.getPayPeriod);
 
 module.exports = router;
