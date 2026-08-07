@@ -1,0 +1,12 @@
+.roster-page { max-width: 960px; margin: 0 auto; padding: 2rem; text-align: left; color: #1f2937; }
+.roster-intro p { color: #4b5563; }
+.roster-controls { display: flex; flex-wrap: wrap; align-items: center; gap: .75rem; margin: 1.5rem 0; }
+.roster-controls label { font-weight: 700; }
+.roster-controls select, .roster-controls button { padding: .55rem .8rem; border-radius: 6px; font: inherit; }
+.roster-controls select, .roster-secondary { border: 1px solid #d1d5db; background: white; }
+.roster-primary { border: 1px solid #2563eb; background: #2563eb; color: white; }
+.roster-banner { padding: .8rem 1rem; border-radius: 6px; }.roster-error { color: #991b1b; background: #fee2e2; }.roster-info { color: #1d4ed8; background: #dbeafe; }
+.roster-stat-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: .75rem; margin: 1.5rem 0; }.roster-stat-tile, .roster-card { background: white; border: 1px solid #e5e7eb; border-radius: 10px; padding: 1rem; box-shadow: 0 1px 3px #0000000d; }.roster-stat-tile p { margin: 0; color: #6b7280; font-size: .8rem; text-transform: uppercase; }.roster-stat-tile strong { display: block; margin-top: .35rem; font-size: 1.35rem; }.roster-warning { color: #b45309; }.roster-time { font-size: .9rem !important; }
+.roster-card { margin: 1.25rem 0; }.roster-card h2 { font-size: 1.1rem; }.roster-table-scroll { overflow-x: auto; }.roster-page table { width: 100%; border-collapse: collapse; }.roster-page th, .roster-page td { padding: .65rem; border-bottom: 1px solid #e5e7eb; text-align: left; }.roster-expandable { cursor: pointer; }.roster-expandable:hover { background: #f9fafb; }.roster-breakdown > td { background: #f9fafb; }
+.roster-empty { color: #6b7280; }.roster-exception-list, .roster-history-list { margin: 0; padding: 0; list-style: none; }.roster-exception-list li, .roster-history-list li { display: flex; align-items: center; gap: .65rem; margin-top: .5rem; padding: .65rem; border-radius: 6px; }.roster-unmatched { background: #fef3c7; }.roster-critical { background: #fee2e2; }.roster-synced { background: #dcfce7; }.roster-exception-list li span, .roster-history-list li span { font-weight: 700; }.roster-exception-list li small, .roster-history-list li small { color: #4b5563; }.roster-history-list time { margin-left: auto; color: #6b7280; font-size: .8rem; }
+@media (max-width: 700px) { .roster-page { padding: 1rem; }.roster-stat-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }.roster-history-list li { flex-wrap: wrap; }.roster-history-list time { margin-left: 0; width: 100%; } }

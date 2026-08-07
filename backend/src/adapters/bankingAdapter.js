@@ -1,9 +1,16 @@
-// STUB: returns fake data until real banking/GIRO file generation access is set up.
-// Real implementation would generate an actual GIRO/bulk-transfer file in the bank's required format.
+// // Generates the UC-005 bank payment CSV for payroll batch export.
+const { stringify } = require("csv-stringify/sync");
 
-async function generatePaymentFile(paymentBatch) {
-  console.log("STUB: pretending to generate a GIRO file for payment batch", paymentBatch.id);
-  return { success: true, filePath: `/fake/path/giro-${paymentBatch.id}.txt` };
-}
-
-module.exports = { generatePaymentFile };
+exports.generateCsv = (batch, items) =>
+  stringify(
+    items.map((item) => ({
+      "Batch Reference": batch.batch_reference,
+      "Employee Reference": item.employee_reference,
+      "Employee Name": item.employee_name,
+      "Bank Code": item.bank_code,
+      "Bank Account Number": item.bank_account_no,
+      "Approved Net Pay Amount": Number(item.net_pay).toFixed(2),
+      "Payment Reference": item.payment_reference,
+    })),
+    { header: true }
+  );
