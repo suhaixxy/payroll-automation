@@ -1,9 +1,11 @@
 import {
   AccountCircleRounded,
+  CalculateRounded,
   DashboardRounded,
   DescriptionRounded,
   ExpandLessRounded,
   ExpandMoreRounded,
+  FactCheckRounded,
   GroupsRounded,
   LogoutRounded,
   MenuRounded,
@@ -11,7 +13,9 @@ import {
   PersonRounded,
   PlaylistAddCheckRounded,
   ReceiptLongRounded,
+  SyncAltRounded,
   TodayRounded,
+  TimerRounded,
 } from "@mui/icons-material";
 import {
   AppBar,
@@ -102,6 +106,10 @@ function Sidebar({ onNavigate }) {
         {isManager && (
           <>
             <SidebarLink icon={<DashboardRounded />} label="Dashboard" path="/dashboard" active={location.pathname === "/dashboard"} onNavigate={onNavigate} />
+            <SidebarLink icon={<SyncAltRounded />} label="Roster Sync" path="/roster" active={location.pathname === "/roster"} onNavigate={onNavigate} />
+            <SidebarLink icon={<TimerRounded />} label="Timesheet Validation" path="/timesheets" active={location.pathname === "/timesheets"} onNavigate={onNavigate} />
+            <SidebarLink icon={<CalculateRounded />} label="Payroll Calc" path="/payroll" active={location.pathname === "/payroll"} onNavigate={onNavigate} />
+            <SidebarLink icon={<FactCheckRounded />} label="Approvals" path="/approvals" active={location.pathname === "/approvals"} onNavigate={onNavigate} />
             <ListItemButton className="sidebar-link sidebar-link-unavailable" disabled>
               <ListItemIcon><GroupsRounded /></ListItemIcon>
               <ListItemText primary="Employees" secondary="Not available" />
