@@ -5,7 +5,7 @@
 const { pool } = require("../config/database");
 
 const PERIOD_LENGTH_DAYS = 14;
-const PERIODS_TO_GENERATE = 26; // ~1 year of fortnightly periods
+const PERIODS_TO_GENERATE = 260; // ~10 years of fortnightly periods
 const ANCHOR_START = new Date("2026-01-01T00:00:00Z");
 
 const SELECT_COLUMNS = `

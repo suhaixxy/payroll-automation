@@ -42,6 +42,13 @@ async function findMatchingStaff(rosterRow) {
 async function runRosterSync(payPeriodId, actor = "manual") {
   if (!payPeriodId) {
     const activePeriod = await payPeriodService.getActivePayPeriod();
+    if (!activePeriod) {
+      return {
+        success: false,
+        error: "ACTIVE_PAY_PERIOD_NOT_FOUND",
+        message: "No active pay period is available",
+      };
+    }
     payPeriodId = activePeriod.id;
   }
 
