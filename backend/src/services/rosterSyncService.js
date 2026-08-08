@@ -104,6 +104,15 @@ async function runRosterSync(payPeriodId, actor = "manual") {
     };
   }
 
+  const resolvedRows = await pool.query(
+    `SELECT to_char(shift_date, 'YYYY-MM-DD') AS shift_date, source_key
+     FROM timesheet
+     WHERE pay_period_id = $1 AND resolved_manually = true AND source_key IS NOT NULL`,
+    [payPeriodId]
+  );
+  const resolvedSourceKeys = new Set(
+    resolvedRows.rows.map((row) => `${row.shift_date}|${row.source_key}`)
+  );
   const matchedShifts = [];
   const unmatchedRows = [];
   const invalidTimeRows = [];
@@ -122,22 +131,26 @@ async function runRosterSync(payPeriodId, actor = "manual") {
     const hoursForRow = calculateHours(row["Clock In"], row["Clock Out"]);
 
     if (Number.isNaN(hoursForRow)) {
+      if (resolvedSourceKeys.has(`${row["Date"]}|${row["Staff Name"]}`)) continue;
       const label = matchResult && !matchResult.inactive ? matchResult.fullName : row["Staff Name"];
       invalidTimeRows.push({
         staffDbId: matchResult && !matchResult.inactive ? matchResult.id : null,
         rosterRawName: `${label} (missing clock-in/out)`,
+        sourceKey: row["Staff Name"],
         date: row["Date"],
       });
       continue;
     }
 
     if (!matchResult) {
-      unmatchedRows.push({ rosterRawName: row["Staff Name"], date: row["Date"], hours: hoursForRow });
+      if (resolvedSourceKeys.has(`${row["Date"]}|${row["Staff Name"]}`)) continue;
+      unmatchedRows.push({ rosterRawName: row["Staff Name"], sourceKey: row["Staff Name"], date: row["Date"], hours: hoursForRow });
       continue;
     }
 
     if (matchResult.inactive) {
-      unmatchedRows.push({ rosterRawName: `${matchResult.fullName} (inactive staff)`, date: row["Date"], hours: hoursForRow });
+      if (resolvedSourceKeys.has(`${row["Date"]}|${row["Staff Name"]}`)) continue;
+      unmatchedRows.push({ rosterRawName: `${matchResult.fullName} (inactive staff)`, sourceKey: row["Staff Name"], date: row["Date"], hours: hoursForRow });
       continue;
     }
 
@@ -169,17 +182,17 @@ async function runRosterSync(payPeriodId, actor = "manual") {
 
     for (const entry of unmatchedRows) {
       await client.query(
-        `INSERT INTO timesheet (pay_period_id, staff_id, roster_raw_name, shift_date, total_hours, match_status)
-         VALUES ($1, NULL, $2, $3, $4, 'unmatched')`,
-        [payPeriodId, entry.rosterRawName, entry.date, entry.hours]
+        `INSERT INTO timesheet (pay_period_id, staff_id, roster_raw_name, shift_date, total_hours, match_status, source_key)
+         VALUES ($1, NULL, $2, $3, $4, 'unmatched', $5)`,
+        [payPeriodId, entry.rosterRawName, entry.date, entry.hours, entry.sourceKey]
       );
     }
 
     for (const entry of invalidTimeRows) {
       await client.query(
-        `INSERT INTO timesheet (pay_period_id, staff_id, roster_raw_name, shift_date, total_hours, match_status)
-         VALUES ($1, $2, $3, $4, 0, 'invalid_time')`,
-        [payPeriodId, entry.staffDbId, entry.rosterRawName, entry.date]
+        `INSERT INTO timesheet (pay_period_id, staff_id, roster_raw_name, shift_date, total_hours, match_status, source_key)
+         VALUES ($1, $2, $3, $4, 0, 'invalid_time', $5)`,
+        [payPeriodId, entry.staffDbId, entry.rosterRawName, entry.date, entry.sourceKey]
       );
     }
 
@@ -379,10 +392,99 @@ async function resolveException(timesheetRowId, resolution) {
   };
 }
 
+async function getResolvedExceptions(payPeriodId) {
+  const { rows } = await pool.query(
+    `SELECT t.id, s.full_name, t.roster_raw_name, t.source_key,
+            to_char(t.shift_date, 'YYYY-MM-DD') AS shift_date,
+            CASE
+              WHEN t.match_status = 'ignored' THEN 'ignored'
+              WHEN t.clock_in IS NULL THEN 'staff_linked'
+              ELSE 'clock_times_updated'
+            END AS resolution_type
+     FROM timesheet t
+     LEFT JOIN staff s ON s.id = t.staff_id
+     WHERE t.pay_period_id = $1 AND t.resolved_manually = true
+     ORDER BY t.shift_date`,
+    [payPeriodId]
+  );
+
+  return rows;
+}
+
+async function undoException(timesheetRowId) {
+  const rowResult = await pool.query(
+    `SELECT id, match_status, is_frozen, clock_in, total_hours
+     FROM timesheet
+     WHERE id = $1 AND resolved_manually = true`,
+    [timesheetRowId]
+  );
+  const row = rowResult.rows[0];
+
+  if (!row) {
+    return {
+      success: false,
+      error: "TIMESHEET_ROW_NOT_FOUND",
+      message: "The manually resolved timesheet row does not exist",
+    };
+  }
+  if (row.is_frozen) {
+    return {
+      success: false,
+      error: "TIMESHEET_ROW_FROZEN",
+      message: "Frozen timesheet rows cannot be undone",
+    };
+  }
+
+  if (row.match_status === "matched" && row.clock_in === null) {
+    await pool.query(
+      `UPDATE timesheet
+       SET staff_id = NULL, roster_raw_name = source_key, match_status = 'unmatched', resolved_manually = false, updated_at = now()
+       WHERE id = $1`,
+      [timesheetRowId]
+    );
+    return { success: true, timesheetRowId, resolution: "staff_link_reverted" };
+  }
+
+  if (row.match_status === "matched" && row.clock_in !== null) {
+    await pool.query(
+      `UPDATE timesheet
+       SET clock_in = NULL, clock_out = NULL, total_hours = 0, match_status = 'invalid_time', resolved_manually = false, updated_at = now()
+       WHERE id = $1`,
+      [timesheetRowId]
+    );
+    return { success: true, timesheetRowId, resolution: "clock_times_reverted" };
+  }
+
+  if (row.match_status === "ignored") {
+    const matchStatus = Number(row.total_hours) === 0 ? "invalid_time" : "unmatched";
+    await pool.query(
+      `UPDATE timesheet
+       SET match_status = $1, resolved_manually = false, updated_at = now()
+       WHERE id = $2`,
+      [matchStatus, timesheetRowId]
+    );
+    return { success: true, timesheetRowId, resolution: `${matchStatus}_reverted` };
+  }
+
+  return {
+    success: false,
+    error: "INVALID_EXCEPTION_RESOLUTION",
+    message: "The manually resolved timesheet row cannot be undone",
+  };
+}
+
+async function resetPeriodResolutions(payPeriodId) {
+  await pool.query(
+    "DELETE FROM timesheet WHERE pay_period_id = $1 AND resolved_manually = true",
+    [payPeriodId]
+  );
+  return runRosterSync(payPeriodId, "manual");
+}
+
 // Recent sync events for this pay period (both scheduled and manual), for
 // the "Sync History" panel on the frontend.
 async function getSyncHistory(payPeriodId, limit = 10) {
   return auditService.getHistory("pay_period", payPeriodId, limit);
 }
 
-module.exports = { runRosterSync, getLastSyncResult, getSyncHistory, resolveException };
+module.exports = { runRosterSync, getLastSyncResult, getSyncHistory, resolveException, getResolvedExceptions, undoException, resetPeriodResolutions };

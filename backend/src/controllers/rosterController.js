@@ -66,4 +66,36 @@ async function resolveException(req, res, next) {
   }
 }
 
-module.exports = { importNow, getSyncSummary, getSyncHistory, resolveException };
+async function getResolvedExceptions(req, res, next) {
+  try {
+    const resolvedExceptions = await rosterSyncService.getResolvedExceptions(req.query.payPeriodId);
+    res.status(200).json({ resolvedExceptions });
+  } catch (err) {
+    next(err);
+  }
+}
+
+async function undoException(req, res, next) {
+  try {
+    const result = await rosterSyncService.undoException(req.params.timesheetRowId);
+    if (!result.success) {
+      const status = result.error === "TIMESHEET_ROW_NOT_FOUND" ? 404 : result.error === "TIMESHEET_ROW_FROZEN" ? 409 : 400;
+      return res.status(status).json(result);
+    }
+    res.status(200).json(result);
+  } catch (err) {
+    next(err);
+  }
+}
+
+async function resetPeriodResolutions(req, res, next) {
+  try {
+    const result = await rosterSyncService.resetPeriodResolutions(req.body.payPeriodId);
+    if (!result.success) return res.status(424).json(result);
+    res.status(200).json(result);
+  } catch (err) {
+    next(err);
+  }
+}
+
+module.exports = { importNow, getSyncSummary, getSyncHistory, resolveException, getResolvedExceptions, undoException, resetPeriodResolutions };
