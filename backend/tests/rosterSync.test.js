@@ -117,6 +117,21 @@ describe("runRosterSync", () => {
     expect(result).toMatchObject({ success: true, staffSynced: 1, totalHours: 9 });
   });
 
+  test("preserves a manually resolved, unfrozen row during a new sync", async () => {
+    configureDatabase({
+      staffById: { S001: { id: "staff-1", staffId: "S001", fullName: "Andrea Chua", status: "active" } },
+      summaryRows: [{ staff_ext_ref: "S001", full_name: "Andrea Chua", total_hours: 9, match_status: "matched", match_method: "manual", shift_date: "2026-08-01", clock_in: "08:00", clock_out: "17:00", is_frozen: false, resolved_manually: true, updated_at: new Date() }],
+    });
+    fetchRosterRows.mockResolvedValue([{ "Staff ID": "S001", "Staff Name": "Andrea Chua", Date: "2026-08-01", "Clock In": "08:00", "Clock Out": "17:00" }]);
+
+    await runRosterSync(payPeriodId);
+
+    expect(client.query).toHaveBeenCalledWith(
+      "DELETE FROM timesheet WHERE pay_period_id = $1 AND is_frozen = false AND resolved_manually = false",
+      [payPeriodId]
+    );
+  });
+
   test("excludes roster rows that fall outside the pay period's date range", async () => {
     configureDatabase({
       staffById: { S001: { id: "staff-1", staffId: "S001", fullName: "Andrea Chua", status: "active" } },
@@ -164,7 +179,7 @@ describe("resolveException", () => {
     const result = await resolveException(timesheetRowId, { staffId });
 
     expect(result).toEqual({ success: true, timesheetRowId, resolution: "staff_linked" });
-    expect(pool.query).toHaveBeenLastCalledWith(expect.stringContaining("match_method = 'manual'"), [staffId, timesheetRowId]);
+    expect(pool.query).toHaveBeenLastCalledWith(expect.stringContaining("match_method = 'manual', resolved_manually = true"), [staffId, timesheetRowId]);
   });
 
   test("updates clock times for an invalid-time row", async () => {
@@ -176,7 +191,7 @@ describe("resolveException", () => {
     const result = await resolveException(timesheetRowId, { clockIn: "08:30", clockOut: "17:00" });
 
     expect(result).toEqual({ success: true, timesheetRowId, resolution: "clock_times_updated" });
-    expect(pool.query).toHaveBeenLastCalledWith(expect.stringContaining("total_hours = $3"), ["08:30", "17:00", 8.5, timesheetRowId]);
+    expect(pool.query).toHaveBeenLastCalledWith(expect.stringContaining("total_hours = $3, match_status = 'matched', resolved_manually = true"), ["08:30", "17:00", 8.5, timesheetRowId]);
   });
 
   test("permanently ignores an exception row", async () => {
@@ -188,7 +203,7 @@ describe("resolveException", () => {
     const result = await resolveException(timesheetRowId, { ignore: true });
 
     expect(result).toEqual({ success: true, timesheetRowId, resolution: "ignored" });
-    expect(pool.query).toHaveBeenLastCalledWith(expect.stringContaining("match_status = 'ignored'"), [timesheetRowId]);
+    expect(pool.query).toHaveBeenLastCalledWith(expect.stringContaining("match_status = 'ignored', resolved_manually = true"), [timesheetRowId]);
   });
 
   test("rejects resolving a frozen timesheet row", async () => {

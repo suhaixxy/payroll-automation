@@ -157,7 +157,7 @@ async function runRosterSync(payPeriodId, actor = "manual") {
     // Replace the draft for this period. Rows already frozen by UC-002
     // validation are left alone, so a re-sync can never overwrite a
     // validated snapshot.
-    await client.query("DELETE FROM timesheet WHERE pay_period_id = $1 AND is_frozen = false", [payPeriodId]);
+    await client.query("DELETE FROM timesheet WHERE pay_period_id = $1 AND is_frozen = false AND resolved_manually = false", [payPeriodId]);
 
     for (const shift of matchedShifts) {
       await client.query(
@@ -324,7 +324,7 @@ async function resolveException(timesheetRowId, resolution) {
   if (resolution?.ignore === true) {
     await pool.query(
       `UPDATE timesheet
-       SET match_status = 'ignored', updated_at = now()
+       SET match_status = 'ignored', resolved_manually = true, updated_at = now()
        WHERE id = $1`,
       [timesheetRowId]
     );
@@ -346,7 +346,7 @@ async function resolveException(timesheetRowId, resolution) {
 
     await pool.query(
       `UPDATE timesheet
-       SET staff_id = $1, roster_raw_name = NULL, match_status = 'matched', match_method = 'manual', updated_at = now()
+       SET staff_id = $1, roster_raw_name = NULL, match_status = 'matched', match_method = 'manual', resolved_manually = true, updated_at = now()
        WHERE id = $2`,
       [resolution.staffId, timesheetRowId]
     );
@@ -365,7 +365,7 @@ async function resolveException(timesheetRowId, resolution) {
 
     await pool.query(
       `UPDATE timesheet
-       SET clock_in = $1, clock_out = $2, total_hours = $3, match_status = 'matched', updated_at = now()
+       SET clock_in = $1, clock_out = $2, total_hours = $3, match_status = 'matched', resolved_manually = true, updated_at = now()
        WHERE id = $4`,
       [resolution.clockIn, resolution.clockOut, hours, timesheetRowId]
     );
