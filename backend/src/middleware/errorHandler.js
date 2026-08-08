@@ -1,17 +1,18 @@
+// Last-resort handler for uncaught errors. Emits the standard error shape
+// (guide §2.5): { success: false, error: { code, message, details } }.
+// Endpoint-level failures (400/401/403/404/409/422) are returned by the
+// endpoints themselves; anything landing here is a bug or an outage.
+
 function errorHandler(err, req, res, next) {
-  if (process.env.NODE_ENV !== "test") {
-    console.error(err.stack || err);
-  }
-
+  console.error(err.stack);
   const status = err.status || 500;
-
   res.status(status).json({
-    error: err.code || "INTERNAL_SERVER_ERROR",
-    message:
-      status === 500 && process.env.NODE_ENV === "production"
-        ? "Something went wrong."
-        : err.message || "Something went wrong.",
-    details: Array.isArray(err.details) ? err.details : [],
+    success: false,
+    error: {
+      code: err.code || "INTERNAL_ERROR",
+      message: err.message || "Internal server error",
+      details: [],
+    },
   });
 }
 

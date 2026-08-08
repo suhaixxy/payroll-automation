@@ -1,10 +1,12 @@
-require("dotenv").config();
+// .env lives at the repo root, one level above backend/.
+require("dotenv").config({ path: require("path").resolve(__dirname, "../../../.env") });
 const fs = require("fs");
 const path = require("path");
 const { Pool } = require("pg");
+const { DEFAULT_URL } = require("./waitForDb");
 
 const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
+  connectionString: process.env.DATABASE_URL || DEFAULT_URL,
 });
 
 async function runSeeds() {

@@ -12,6 +12,8 @@ const db = {
     PaymentBatch: require("./PaymentBatch")(sequelize, DataTypes),
     PaymentBatchItem: require("./PaymentBatchItem")(sequelize, DataTypes),
     Payslip: require("./Payslip")(sequelize, DataTypes),
+    // UC-003
+    PayRate: require("./PayRate")(sequelize, DataTypes),
 };
 
 db.User.belongsTo(db.Staff, { foreignKey: "staff_id", as: "staff" });

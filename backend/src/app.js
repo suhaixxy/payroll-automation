@@ -1,3 +1,6 @@
+// Sets up the Express application: middleware + routes.
+// server.js is what actually starts it listening on a port.
+
 const express = require("express");
 const cors = require("cors");
 const helmet = require("helmet");
@@ -5,6 +8,7 @@ const helmet = require("helmet");
 const routes = require("./routes/index");
 const requestLogger = require("./middleware/requestLogger");
 const errorHandler = require("./middleware/errorHandler");
+const apiResponse = require("./middleware/apiResponse");
 const { pool } = require("./config/database");
 
 const app = express();
@@ -30,6 +34,10 @@ app.use(
 );
 
 app.use(requestLogger);
+app.use(apiResponse);
+
+// Friendly landing response so opening http://localhost:5000 in a browser
+// doesn't show "Cannot GET /" — the real endpoints live under /api.
 
 // ==========================================================
 // Health checks
@@ -61,6 +69,13 @@ app.get("/api/health", healthCheck);
 // ==========================================================
 // API routes
 // ==========================================================
+
+app.get('/', (req, res) => {
+  res.json({
+    name: 'Payroll Automation API',
+    endpoints: ['/api/pay-periods', '/api/roster', '/api/payroll', '/api/user'],
+  });
+});
 
 app.use("/api", routes);
 

@@ -6,6 +6,7 @@ import { CssBaseline, ThemeProvider } from "@mui/material";
 import App from "./App.jsx";
 import MyTheme from "./theme";
 
+import "./App.css";
 import "./styles/main.css";
 
 createRoot(document.getElementById("root")).render(

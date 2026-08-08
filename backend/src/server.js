@@ -1,38 +1,37 @@
-require("dotenv").config();
+// .env lives at the payroll-automation project root, one level above
+// backend/ — must load before anything below reads process.env.
+require("dotenv").config({ path: require("path").resolve(__dirname, "../../.env") });
 
 const app = require("./app");
-const { connectDB } = require("./config/database");
+const rosterSyncScheduler = require("./jobs/rosterSyncScheduler");
 const payPeriodService = require("./services/payPeriodService");
-const scheduler = require("./jobs/rosterSyncScheduler");
-
+const { initializeDatabase } = require("./db/initializeDatabase");
+const { waitForDatabase } = require("./db/waitForDb");
 const PORT = process.env.PORT || 5000;
 
-const startServer = async () => {
-  try {
-    // Verify PostgreSQL connection before starting the API.
-    await connectDB();
+async function start() {
+  // The compose file has no healthcheck, so right after `npm run db:up` the
+  // container is "running" before Postgres accepts connections — poll first.
+  await waitForDatabase({ log: (message) => console.log(`[server] ${message}`) });
 
-    app.listen(PORT, async () => {
-      console.log(`Server running on port ${PORT}`);
+  // Apply any pending SQL migrations (all tables are migration-owned,
+  // including UC-003's — no Sequelize sync needed).
+  await initializeDatabase();
 
-      // UC-001 roster synchronisation scheduler.
-      scheduler.start();
+  // Also doubles as a startup DB connectivity check — if Postgres isn't
+  // running, this fails loudly here instead of on the first API request.
+  const result = await payPeriodService.ensurePayPeriodsSeeded();
+  console.log(`[startup] ${result.message}`);
 
-      // Ensure required payroll periods exist.
-      try {
-        const result = await payPeriodService.ensurePayPeriodsSeeded();
-        console.log(`[startup] ${result.message}`);
-      } catch (error) {
-        console.error(
-          "[startup] Failed to ensure pay periods are seeded:",
-          error.message
-        );
-      }
-    });
-  } catch (error) {
-    console.error("Server startup failed.", error);
-    process.exitCode = 1;
-  }
-};
+  app.listen(PORT, () => {
+    console.log(`Server running on port ${PORT}`);
+  });
 
-startServer();
+  rosterSyncScheduler.start();
+}
+
+start().catch((err) => {
+  console.error(`[server] Failed to start: ${err.message}`);
+  console.error("[server] Is Docker Desktop running? Try: npm run db:up");
+  process.exit(1);
+});
