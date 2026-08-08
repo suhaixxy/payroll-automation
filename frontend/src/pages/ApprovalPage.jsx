@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 const API_URL = `${import.meta.env.VITE_BACKEND_URL || "http://localhost:5000"}/api/approvals`;
 const money = new Intl.NumberFormat("en-SG", { style: "currency", currency: "SGD" });
 const label = (value) => (value || "").replaceAll("_", " ");
+const fmtDate = (v) => new Date(v).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric", timeZone: "UTC" });
 
 async function request(path, options) {
   const response = await fetch(`${API_URL}${path}`, options);
@@ -69,7 +70,7 @@ function ApprovalPage() {
     {message && <div className={`message ${message.type}`}>{message.text}</div>}
     <section className="toolbar"><label>Payroll cycle
       <select value={periodId} onChange={(event) => setPeriodId(event.target.value)} disabled={!periods.length}>
-        {periods.map((period) => <option key={period.id} value={period.id}>{period.startDate} to {period.endDate} · {label(period.status)}</option>)}
+        {periods.map((period) => <option key={period.id} value={period.id}>{fmtDate(period.startDate)} – {fmtDate(period.endDate)} · {label(period.status)}</option>)}
       </select>
     </label></section>
     {loading && <p>Loading payroll information…</p>}
