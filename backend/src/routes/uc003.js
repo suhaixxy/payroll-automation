@@ -42,6 +42,16 @@ router.get('/periods/:periodId/variance', requireAuth, uc003Controller.staffVari
 router.get('/periods/:periodId/export.csv', requireAuth, uc003Controller.exportCsv);
 router.get('/lines/:lineId', requireAuth, uc003Controller.line);
 
+// Payroll line CRUD — manual overrides on the latest run (§5.10).
+// Manager only; blocked once the period is approved or paid.
+router.post('/periods/:periodId/lines', requireAuth, requireRole('manager'), uc003Controller.createLine);
+router.patch('/lines/:lineId', requireAuth, requireRole('manager'), uc003Controller.updateLine);
+router.delete('/lines/:lineId', requireAuth, requireRole('manager'), uc003Controller.deleteLine);
+
+// Edit history — recent edits across all entities, and per-entity trail.
+router.get('/edit-log/recent', requireAuth, uc003Controller.recentEdits);
+router.get('/edit-log/:entityType/:entityId', requireAuth, uc003Controller.editHistory);
+
 router.post('/runs/:runId/void', requireAuth, requireRole('manager'), uc003Controller.voidRun);
 
 // Payroll adjustments — full CRUD (§6). Reads: any authenticated user.

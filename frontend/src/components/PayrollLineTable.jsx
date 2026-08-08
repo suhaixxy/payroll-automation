@@ -32,7 +32,7 @@ function SortableHeader({ label, sortKey, sort, dir, onSort, numeric }) {
   );
 }
 
-function PayrollLineTable({ lines, onResolve, onShowBreakdown, sort, dir, onSort, filtered }) {
+function PayrollLineTable({ lines, onResolve, onShowBreakdown, sort, dir, onSort, filtered, canMutate, onEditLine, onDeleteLine }) {
   if (!lines || lines.length === 0) {
     return (
       <p className="empty-state">
@@ -48,7 +48,7 @@ function PayrollLineTable({ lines, onResolve, onShowBreakdown, sort, dir, onSort
       <table>
         <thead>
           <tr>
-            <th>Staff ID</th>
+            <SortableHeader label="Staff ID" sortKey="ref" sort={sort} dir={dir} onSort={onSort} />
             <SortableHeader label="Name" sortKey="name" sort={sort} dir={dir} onSort={onSort} />
             <th>Type</th>
             <th className="numeric">Hours Gross</th>
@@ -60,6 +60,7 @@ function PayrollLineTable({ lines, onResolve, onShowBreakdown, sort, dir, onSort
             <SortableHeader label="Net Payable" sortKey="net" sort={sort} dir={dir} onSort={onSort} numeric />
             <SortableHeader label="Status" sortKey="status" sort={sort} dir={dir} onSort={onSort} />
             {onShowBreakdown && <th />}
+            {canMutate && <th aria-label="actions" />}
           </tr>
         </thead>
         <tbody>
@@ -122,6 +123,12 @@ function PayrollLineTable({ lines, onResolve, onShowBreakdown, sort, dir, onSort
                   >
                     Details
                   </button>
+                </td>
+              )}
+              {canMutate && (
+                <td className="numeric">
+                  <button type="button" className="row-action" title="Edit" aria-label={`Edit line for ${line.staffName}`} onClick={() => onEditLine(line)}>✎</button>
+                  <button type="button" className="row-action" title="Delete" aria-label={`Delete line for ${line.staffName}`} onClick={() => onDeleteLine(line)}>🗑</button>
                 </td>
               )}
             </tr>

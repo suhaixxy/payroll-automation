@@ -244,6 +244,70 @@ async function exportCsv(req, res, next) {
   }
 }
 
+// ── Payroll line CRUD ──────────────────────────────────────────────────
+
+async function createLine(req, res, next) {
+  try {
+    if (!checkUuid(res, req.params.periodId, 'PERIOD_NOT_FOUND', 'pay period')) return;
+    const result = await runService.createLine(req.params.periodId, req.body, actorOf(req));
+    if (result.error) return failFromServiceError(res, result);
+    res.created(result.data);
+  } catch (err) {
+    next(err);
+  }
+}
+
+async function updateLine(req, res, next) {
+  try {
+    if (!checkUuid(res, req.params.lineId, 'LINE_NOT_FOUND', 'payroll line')) return;
+    const result = await runService.updateLine(req.params.lineId, req.body, actorOf(req));
+    if (result.error) return failFromServiceError(res, result);
+    res.ok(result.data);
+  } catch (err) {
+    next(err);
+  }
+}
+
+async function deleteLine(req, res, next) {
+  try {
+    if (!checkUuid(res, req.params.lineId, 'LINE_NOT_FOUND', 'payroll line')) return;
+    const result = await runService.deleteLine(req.params.lineId, actorOf(req));
+    if (result.error) return failFromServiceError(res, result);
+    res.ok(result.data);
+  } catch (err) {
+    next(err);
+  }
+}
+
+// ── Edit history ───────────────────────────────────────────────────────
+
+const editLogService = require('../services/editLogService');
+
+async function editHistory(req, res, next) {
+  try {
+    const { entityType, entityId } = req.params;
+    if (!checkUuid(res, entityId, 'ENTITY_NOT_FOUND', 'entity')) return;
+    const validTypes = ['payroll_line', 'adjustment', 'performance_input'];
+    if (!validTypes.includes(entityType)) {
+      return res.fail(400, 'INVALID_ENTITY_TYPE', `entityType must be one of: ${validTypes.join(', ')}`);
+    }
+    const rows = await editLogService.getHistory(entityType, entityId);
+    res.ok({ history: rows });
+  } catch (err) {
+    next(err);
+  }
+}
+
+async function recentEdits(req, res, next) {
+  try {
+    const limit = Math.min(Number(req.query.limit) || 50, 200);
+    const rows = await editLogService.getRecentEdits(limit);
+    res.ok({ edits: rows });
+  } catch (err) {
+    next(err);
+  }
+}
+
 module.exports = {
   listPeriods,
   listStaff,
@@ -257,4 +321,9 @@ module.exports = {
   runs,
   staffVariance,
   exportCsv,
+  createLine,
+  updateLine,
+  deleteLine,
+  editHistory,
+  recentEdits,
 };

@@ -269,6 +269,36 @@ export function fetchRateSet(id) {
   return authedFetch(`/api/uc003/rate-sets/${encodeURIComponent(id)}`);
 }
 
+// Payroll line CRUD — manual overrides on the latest run.
+export function createPayrollLine(periodId, body) {
+  return authedFetch(`/api/uc003/periods/${encodeURIComponent(periodId)}/lines`, {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}
+
+export function updatePayrollLine(lineId, body) {
+  return authedFetch(`/api/uc003/lines/${encodeURIComponent(lineId)}`, {
+    method: "PATCH",
+    body: JSON.stringify(body),
+  });
+}
+
+export function deletePayrollLine(lineId) {
+  return authedFetch(`/api/uc003/lines/${encodeURIComponent(lineId)}`, {
+    method: "DELETE",
+  });
+}
+
+// Edit history audit trail.
+export function fetchEditHistory(entityType, entityId) {
+  return authedFetch(`/api/uc003/edit-log/${encodeURIComponent(entityType)}/${encodeURIComponent(entityId)}`);
+}
+
+export function fetchRecentEdits(limit = 50) {
+  return authedFetch(`/api/uc003/edit-log/recent?limit=${limit}`);
+}
+
 export { TOKEN_KEY, apiGet, apiPost };
 
 export default apiClient;

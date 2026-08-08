@@ -23,6 +23,7 @@ const { sequelize, PayRate } = require('../models');
 const calculationEngine = require('./calculationEngine');
 const rateSetService = require('./rateSetService');
 const { logUc003Action } = require('./uc003AuditService');
+const editLogService = require('./editLogService');
 const { statuses: PAYROLL_STATUS, uc003Locked } = require('../../../shared/payrollStatus.json');
 
 // §5.10: warn (never block) when net payable moves more than this fraction
@@ -56,7 +57,7 @@ async function loadAuthoritativeRun(periodId) {
             r.total_net_payable AS "totalNetPayable",
             r.lines_complete AS "linesComplete",
             r.lines_incomplete AS "linesIncomplete",
-            to_char(r.run_at, 'YYYY-MM-DD"T"HH24:MI:SSOF') AS "runAt",
+            to_char(r.run_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') AS "runAt",
             u.name AS "runByName",
             s.version_label AS "rateSetVersion",
             r.rate_set_id AS "rateSetId"
@@ -496,6 +497,7 @@ async function getSummary(periodId) {
 }
 
 const LINE_SORTS = {
+  ref: 's.external_ref',
   name: 's.full_name',
   gross: 'pl.gross_total',
   net: 'pl.net_pay',
@@ -566,7 +568,7 @@ async function getLine(lineId) {
             s.full_name AS "staffName", s.external_ref AS "externalRef",
             s.employment_type AS "employmentType", s.cpf_eligible AS "cpfEligible",
             r.run_number AS "runNumber", r.status AS "runStatus",
-            to_char(r.run_at, 'YYYY-MM-DD"T"HH24:MI:SSOF') AS "runAt",
+            to_char(r.run_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') AS "runAt",
             u.name AS "runByName", rs.version_label AS "rateSetVersion"
      FROM payroll_lines pl
      JOIN staff s ON s.id = pl.staff_id
@@ -725,7 +727,7 @@ async function getRuns(periodId) {
             r.total_gross AS "totalGross", r.total_net_payable AS "totalNetPayable",
             r.lines_complete AS "linesComplete", r.lines_incomplete AS "linesIncomplete",
             r.void_reason AS "voidReason",
-            to_char(r.run_at, 'YYYY-MM-DD"T"HH24:MI:SSOF') AS "runAt",
+            to_char(r.run_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') AS "runAt",
             u.name AS "runByName", s.version_label AS "rateSetVersion"
      FROM calculation_runs r
      JOIN users u ON u.id = r.run_by
@@ -767,6 +769,164 @@ async function listPeriods() {
   return { data: { periods } };
 }
 
+// ── Payroll line CRUD (§5.10 manual overrides) ─────────────────────────
+// Allows managers to add, edit, or remove individual payroll lines on the
+// latest completed run of a period. Changes are scoped to that run; a
+// subsequent recalculate replaces them.
+
+async function createLine(periodId, body, actor) {
+  const probe = await loadPeriod(periodId);
+  if (!probe) return { error: 'PERIOD_NOT_FOUND' };
+  if (uc003Locked.includes(probe.status)) return { error: 'PERIOD_LOCKED', currentStatus: probe.status };
+
+  const run = await loadAuthoritativeRun(periodId);
+  if (!run) return { error: 'NO_RUN' };
+
+  const { staffId: rawStaffId, staffName, regularHours = 0, otHours = 0, phHours = 0,
+    hourlyRateUsed = 0, grossFromHours = 0, incentiveAmount = 0,
+    adjustmentsTotal = 0, grossTotal = 0, cpfEmployee = 0, cpfEmployer = 0,
+    sdl = 0, netPay = 0 } = body;
+
+  // Resolve staff: use provided staffId, or find/create by name.
+  let staffId = rawStaffId;
+  if (!staffId && staffName) {
+    const [match] = await sequelize.query(
+      `SELECT id FROM staff WHERE lower(full_name) = lower(:name) LIMIT 1`,
+      { replacements: { name: staffName.trim() }, type: QueryTypes.SELECT }
+    );
+    if (match) {
+      staffId = match.id;
+    } else {
+      // Auto-create a new staff record with the next sequential staff ID.
+      const [maxRow] = await sequelize.query(
+        `SELECT COALESCE(MAX(NULLIF(regexp_replace(external_ref, '\\D', '', 'g'), '')::int), 0) + 1 AS next_num FROM staff`,
+        { type: QueryTypes.SELECT }
+      );
+      const ref = 'S' + String(maxRow.next_num).padStart(3, '0');
+      const [created] = await sequelize.query(
+        `INSERT INTO staff (external_ref, full_name, employment_type)
+         VALUES (:ref, :name, 'part_time') RETURNING id`,
+        { replacements: { ref, name: staffName.trim() } }
+      );
+      staffId = created[0].id;
+    }
+  }
+  if (!staffId) return { error: 'VALIDATION_ERROR', message: 'staffId or staffName is required' };
+
+  const [rows] = await sequelize.query(
+    `INSERT INTO payroll_lines
+       (run_id, staff_id, period_id, regular_hours, ot_hours, ph_hours,
+        hourly_rate_used, gross_from_hours, incentive_amount, adjustments_total,
+        gross_total, cpf_employee, cpf_employer, sdl, net_pay,
+        line_status, calc_breakdown)
+     VALUES (:runId, :staffId, :periodId, :regularHours, :otHours, :phHours,
+        :hourlyRateUsed, :grossFromHours, :incentiveAmount, :adjustmentsTotal,
+        :grossTotal, :cpfEmployee, :cpfEmployer, :sdl, :netPay,
+        'complete', '[]'::jsonb)
+     RETURNING id`,
+    {
+      replacements: {
+        runId: run.id, staffId, periodId,
+        regularHours: Number(regularHours).toFixed(2),
+        otHours: Number(otHours).toFixed(2),
+        phHours: Number(phHours).toFixed(2),
+        hourlyRateUsed: Number(hourlyRateUsed).toFixed(2),
+        grossFromHours: Number(grossFromHours).toFixed(2),
+        incentiveAmount: Number(incentiveAmount).toFixed(2),
+        adjustmentsTotal: Number(adjustmentsTotal).toFixed(2),
+        grossTotal: Number(grossTotal).toFixed(2),
+        cpfEmployee: Number(cpfEmployee).toFixed(2),
+        cpfEmployer: Number(cpfEmployer).toFixed(2),
+        sdl: Number(sdl).toFixed(2),
+        netPay: Number(netPay).toFixed(2),
+      },
+    }
+  );
+
+  const newId = rows[0].id;
+  await editLogService.recordEdit('payroll_line', newId, 'created', actor, body);
+  return { data: { id: newId } };
+}
+
+async function updateLine(lineId, body, actor) {
+  // Fetch current row with period status AND the field values for the diff.
+  const [existing] = await sequelize.query(
+    `SELECT pl.id, pl.regular_hours, pl.ot_hours, pl.ph_hours, pl.hourly_rate_used,
+            pl.gross_from_hours, pl.incentive_amount, pl.adjustments_total,
+            pl.gross_total, pl.cpf_employee, pl.cpf_employer, pl.sdl, pl.net_pay,
+            r.period_id, p.status AS period_status
+     FROM payroll_lines pl
+     JOIN calculation_runs r ON r.id = pl.run_id
+     JOIN pay_period p ON p.id = r.period_id
+     WHERE pl.id = :lineId`,
+    { replacements: { lineId }, type: QueryTypes.SELECT }
+  );
+  if (!existing) return { error: 'LINE_NOT_FOUND' };
+  if (uc003Locked.includes(existing.period_status)) {
+    return { error: 'PERIOD_LOCKED', currentStatus: existing.period_status };
+  }
+
+  const allowed = [
+    'regularHours', 'otHours', 'phHours', 'hourlyRateUsed',
+    'grossFromHours', 'incentiveAmount', 'adjustmentsTotal',
+    'grossTotal', 'cpfEmployee', 'cpfEmployer', 'sdl', 'netPay',
+  ];
+  const columnMap = {
+    regularHours: 'regular_hours', otHours: 'ot_hours', phHours: 'ph_hours',
+    hourlyRateUsed: 'hourly_rate_used', grossFromHours: 'gross_from_hours',
+    incentiveAmount: 'incentive_amount', adjustmentsTotal: 'adjustments_total',
+    grossTotal: 'gross_total', cpfEmployee: 'cpf_employee',
+    cpfEmployer: 'cpf_employer', sdl: 'sdl', netPay: 'net_pay',
+  };
+
+  const sets = [];
+  const replacements = { lineId };
+  const changes = {};
+  for (const key of allowed) {
+    if (body[key] !== undefined) {
+      const col = columnMap[key];
+      const newVal = Number(body[key]).toFixed(2);
+      const oldVal = existing[col] != null ? Number(existing[col]).toFixed(2) : '0.00';
+      if (newVal !== oldVal) {
+        sets.push(`${col} = :${key}`);
+        replacements[key] = newVal;
+        changes[key] = { from: oldVal, to: newVal };
+      }
+    }
+  }
+  if (sets.length === 0) return { data: { id: lineId } };
+
+  await sequelize.query(
+    `UPDATE payroll_lines SET ${sets.join(', ')} WHERE id = :lineId`,
+    { replacements }
+  );
+  await editLogService.recordEdit('payroll_line', lineId, 'updated', actor, changes);
+  return { data: { id: lineId } };
+}
+
+async function deleteLine(lineId, actor) {
+  const [existing] = await sequelize.query(
+    `SELECT pl.id, pl.staff_id, r.period_id, p.status AS period_status
+     FROM payroll_lines pl
+     JOIN calculation_runs r ON r.id = pl.run_id
+     JOIN pay_period p ON p.id = r.period_id
+     WHERE pl.id = :lineId`,
+    { replacements: { lineId }, type: QueryTypes.SELECT }
+  );
+  if (!existing) return { error: 'LINE_NOT_FOUND' };
+  if (uc003Locked.includes(existing.period_status)) {
+    return { error: 'PERIOD_LOCKED', currentStatus: existing.period_status };
+  }
+
+  await sequelize.query(`DELETE FROM payroll_lines WHERE id = :lineId`, {
+    replacements: { lineId },
+  });
+  await editLogService.recordEdit('payroll_line', lineId, 'deleted', actor, {
+    staffId: existing.staff_id,
+  });
+  return { data: { id: lineId } };
+}
+
 module.exports = {
   executeRun,
   submitForApproval,
@@ -779,5 +939,8 @@ module.exports = {
   getStaffVariance,
   listPeriods,
   listStaff,
+  createLine,
+  updateLine,
+  deleteLine,
   VARIANCE_THRESHOLD,
 };

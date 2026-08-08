@@ -10,11 +10,16 @@ import {
   fetchPayrollSummary,
   fetchPayrollLines,
   downloadPayrollRegister,
+  createPayrollLine,
+  updatePayrollLine,
+  deletePayrollLine,
+  fetchUc003Staff,
+  fetchRecentEdits,
 } from '../api/client';
 import PayrollLineTable, { formatMoney } from '../components/PayrollLineTable';
 import AdjustmentsPanel from '../components/AdjustmentsPanel';
 import PerformanceInputsPanel from '../components/PerformanceInputsPanel';
-import RateSetsPanel from '../components/RateSetsPanel';
+import RateSetFooter from '../components/RateSetFooter';
 import RunHistoryPanel from '../components/RunHistoryPanel';
 import StaffVariancePanel from '../components/StaffVariancePanel';
 import LineBreakdownModal from '../components/LineBreakdownModal';
@@ -23,7 +28,7 @@ import payrollStatus from '../../../shared/payrollStatus.json';
 
 const PAYROLL_STATUS = payrollStatus.statuses;
 const LINES_PER_PAGE = 20;
-const DEFAULT_LINE_QUERY = { search: '', status: '', sort: 'name', dir: 'asc', page: 1 };
+const DEFAULT_LINE_QUERY = { search: '', status: '', sort: 'ref', dir: 'asc', page: 1 };
 
 // UC-003 page: pick a validated pay period and run the payroll calculation
 // on its frozen hour snapshot. Every execution is a numbered, immutable
@@ -55,6 +60,35 @@ function PayrollCalcPage() {
   const [breakdownLineId, setBreakdownLineId] = useState(null); // §7.3 modal
   const [showVariance, setShowVariance] = useState(false); // §7.2 panel
   const [exporting, setExporting] = useState(false); // §7.9 CSV
+
+  // ── Payroll line CRUD state ─────────────────────────────────────────
+  const [staffOptions, setStaffOptions] = useState([]);
+  const [lineEditing, setLineEditing] = useState(null); // null | 'new' | line id
+  const [lineForm, setLineForm] = useState({ staffName: '', grossTotal: '', netPay: '', cpfEmployee: '', cpfEmployer: '', sdl: '' });
+  const [lineFormError, setLineFormError] = useState(null);
+  const [lineSaving, setLineSaving] = useState(false);
+
+  // ── Edit log state ──────────────────────────────────────────────────
+  const [editLog, setEditLog] = useState(null);
+  const [editLogLoading, setEditLogLoading] = useState(false);
+
+  // Load staff options for the line create form.
+  useEffect(() => {
+    if (!user) return;
+    fetchUc003Staff().then((result) => {
+      if (result.ok) setStaffOptions(result.data?.data?.staff || []);
+    });
+  }, [user]);
+
+  // Fetch recent edits when the Edit Log tab is opened.
+  useEffect(() => {
+    if (activeTab !== 'editlog') return;
+    setEditLogLoading(true);
+    fetchRecentEdits(50).then((result) => {
+      setEditLogLoading(false);
+      if (result.ok) setEditLog(result.data?.data?.edits || []);
+    });
+  }, [activeTab, linesRefresh]);
 
   useEffect(() => {
     if (!user) return;
@@ -133,6 +167,77 @@ function PayrollCalcPage() {
 
   function refreshLines() {
     setLinesRefresh((count) => count + 1);
+  }
+
+  // ── Payroll line CRUD handlers ──────────────────────────────────────
+  function startNewLine() {
+    setLineEditing('new');
+    setLineForm({ staffName: '', grossTotal: '', netPay: '', cpfEmployee: '', cpfEmployer: '', sdl: '' });
+    setLineFormError(null);
+  }
+
+  function startEditLine(line) {
+    setLineEditing(line.id);
+    setLineForm({
+      staffName: line.staffName || '',
+      grossTotal: line.grossTotal,
+      netPay: line.netPay,
+      cpfEmployee: line.cpfEmployee,
+      cpfEmployer: line.cpfEmployer,
+      sdl: line.sdl,
+    });
+    setLineFormError(null);
+  }
+
+  function cancelLineEdit() {
+    setLineEditing(null);
+    setLineFormError(null);
+  }
+
+  async function handleLineSave() {
+    setLineSaving(true);
+    setLineFormError(null);
+    let result;
+    if (lineEditing === 'new') {
+      result = await createPayrollLine(selectedPeriodId, {
+        staffName: lineForm.staffName,
+        grossTotal: Number(lineForm.grossTotal) || 0,
+        netPay: Number(lineForm.netPay) || 0,
+        cpfEmployee: Number(lineForm.cpfEmployee) || 0,
+        cpfEmployer: Number(lineForm.cpfEmployer) || 0,
+        sdl: Number(lineForm.sdl) || 0,
+      });
+    } else {
+      result = await updatePayrollLine(lineEditing, {
+        grossTotal: Number(lineForm.grossTotal) || 0,
+        netPay: Number(lineForm.netPay) || 0,
+        cpfEmployee: Number(lineForm.cpfEmployee) || 0,
+        cpfEmployer: Number(lineForm.cpfEmployer) || 0,
+        sdl: Number(lineForm.sdl) || 0,
+      });
+    }
+    setLineSaving(false);
+    if (!result.ok) {
+      setLineFormError(result.data?.error?.message || 'Saving failed.');
+      return;
+    }
+    cancelLineEdit();
+    refreshLines();
+    loadSummary(selectedPeriodId);
+  }
+
+  async function handleLineDelete(line) {
+    const confirmed = window.confirm(
+      `Delete the payroll line for ${line.staffName} (${formatMoney(line.netPay)})?`
+    );
+    if (!confirmed) return;
+    const result = await deletePayrollLine(line.id);
+    if (!result.ok) {
+      setErrorMessage(result.data?.error?.message || 'Delete failed.');
+      return;
+    }
+    refreshLines();
+    loadSummary(selectedPeriodId);
   }
 
   function handlePeriodChange(event) {
@@ -450,20 +555,20 @@ function PayrollCalcPage() {
         <button
           type="button"
           role="tab"
-          aria-selected={activeTab === 'rates'}
-          className={`tab${activeTab === 'rates' ? ' tab-active' : ''}`}
-          onClick={() => setActiveTab('rates')}
-        >
-          Rate Sets
-        </button>
-        <button
-          type="button"
-          role="tab"
           aria-selected={activeTab === 'runs'}
           className={`tab${activeTab === 'runs' ? ' tab-active' : ''}`}
           onClick={() => setActiveTab('runs')}
         >
           Run History
+        </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={activeTab === 'editlog'}
+          className={`tab${activeTab === 'editlog' ? ' tab-active' : ''}`}
+          onClick={() => setActiveTab('editlog')}
+        >
+          Edit Log
         </button>
       </div>
 
@@ -484,6 +589,11 @@ function PayrollCalcPage() {
           <div className="card-header">
             <h2>Per-Staff Payroll Lines</h2>
             <div className="button-row card-actions">
+              {run && !periodLocked && user?.role === 'manager' && !lineEditing && (
+                <button type="button" onClick={startNewLine} disabled={staffOptions.length === 0}>
+                  + New Payroll Line
+                </button>
+              )}
               {run && !showVariance && (
                 <button type="button" onClick={() => setShowVariance(true)}>
                   Compare vs previous period
@@ -503,6 +613,54 @@ function PayrollCalcPage() {
               )}
             </div>
           </div>
+
+          {lineEditing && (
+            <div className="inline-editor">
+              <strong>{lineEditing === 'new' ? 'New payroll line' : 'Edit payroll line'}</strong>
+              <div className="field-row">
+                <div className="field-column">
+                  <label htmlFor="pl-staff">Staff Name</label>
+                  <input
+                    id="pl-staff"
+                    type="text"
+                    placeholder="Type a name…"
+                    value={lineForm.staffName}
+                    disabled={lineEditing !== 'new'}
+                    onChange={(e) => setLineForm({ ...lineForm, staffName: e.target.value })}
+                  />
+                </div>
+                <div className="field-column">
+                  <label htmlFor="pl-gross">Gross Total</label>
+                  <input id="pl-gross" type="number" step="0.01" min="0" value={lineForm.grossTotal} onChange={(e) => setLineForm({ ...lineForm, grossTotal: e.target.value })} />
+                </div>
+                <div className="field-column">
+                  <label htmlFor="pl-net">Net Pay</label>
+                  <input id="pl-net" type="number" step="0.01" min="0" value={lineForm.netPay} onChange={(e) => setLineForm({ ...lineForm, netPay: e.target.value })} />
+                </div>
+              </div>
+              <div className="field-row">
+                <div className="field-column">
+                  <label htmlFor="pl-cpf-ee">CPF (Employee)</label>
+                  <input id="pl-cpf-ee" type="number" step="0.01" min="0" value={lineForm.cpfEmployee} onChange={(e) => setLineForm({ ...lineForm, cpfEmployee: e.target.value })} />
+                </div>
+                <div className="field-column">
+                  <label htmlFor="pl-cpf-er">CPF (Employer)</label>
+                  <input id="pl-cpf-er" type="number" step="0.01" min="0" value={lineForm.cpfEmployer} onChange={(e) => setLineForm({ ...lineForm, cpfEmployer: e.target.value })} />
+                </div>
+                <div className="field-column">
+                  <label htmlFor="pl-sdl">SDL</label>
+                  <input id="pl-sdl" type="number" step="0.01" min="0" value={lineForm.sdl} onChange={(e) => setLineForm({ ...lineForm, sdl: e.target.value })} />
+                </div>
+              </div>
+              {lineFormError && <p className="line-note">{lineFormError}</p>}
+              <div className="button-row">
+                <button type="button" className="primary" onClick={handleLineSave} disabled={lineSaving || (lineEditing === 'new' && !lineForm.staffName.trim())}>
+                  {lineSaving ? 'Saving…' : 'Save'}
+                </button>
+                <button type="button" onClick={cancelLineEdit} disabled={lineSaving}>Cancel</button>
+              </div>
+            </div>
+          )}
 
           {run && (
             <div className="field-row table-controls">
@@ -539,6 +697,9 @@ function PayrollCalcPage() {
             onSort={handleSort}
             onShowBreakdown={(line) => setBreakdownLineId(line.id)}
             onResolve={user?.role === 'manager' ? handleResolve : undefined}
+            canMutate={!periodLocked && user?.role === 'manager'}
+            onEditLine={startEditLine}
+            onDeleteLine={handleLineDelete}
           />
           )}
 
@@ -585,8 +746,6 @@ function PayrollCalcPage() {
         />
       )}
 
-      {activeTab === 'rates' && <RateSetsPanel />}
-
       {activeTab === 'runs' && selectedPeriodId && (
         <RunHistoryPanel
           periodId={selectedPeriodId}
@@ -602,6 +761,63 @@ function PayrollCalcPage() {
       {breakdownLineId && (
         <LineBreakdownModal lineId={breakdownLineId} onClose={() => setBreakdownLineId(null)} />
       )}
+
+      {activeTab === 'editlog' && (
+        <div className="card">
+          <div className="card-header">
+            <h2>Recent Edit Log</h2>
+            <span className="card-count">
+              {editLog ? `${editLog.length} ${editLog.length === 1 ? 'entry' : 'entries'}` : ''}
+            </span>
+          </div>
+          {editLogLoading && <p className="muted"><span className="spinner" /> Loading edit history…</p>}
+          {!editLogLoading && editLog && editLog.length === 0 && (
+            <p className="empty-state">No edits recorded yet — changes to payroll lines will appear here.</p>
+          )}
+          {!editLogLoading && editLog && editLog.length > 0 && (
+            <div className="edit-history-timeline">
+              {editLog.map((entry) => (
+                <div key={entry.id} className={`edit-history-entry edit-action-${entry.action}`}>
+                  <div className="edit-history-header">
+                    <span className={`badge ${
+                      entry.action === 'created' ? 'badge-good' :
+                      entry.action === 'deleted' ? 'badge-critical' : 'badge-warning'
+                    }`}>
+                      <span className="badge-dot" />
+                      {entry.action === 'created' ? 'Created' : entry.action === 'deleted' ? 'Deleted' : 'Updated'}
+                    </span>
+                    <span className="edit-history-meta">
+                      {entry.staffRef ? <strong>{entry.staffRef} — {entry.staffName}</strong> : entry.entityType.replace(/_/g, ' ')}
+                      {' · '}by <strong>{entry.userName}</strong>
+                      {' · '}{new Date(entry.createdAt).toLocaleString('en-SG', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                    </span>
+                  </div>
+                  {entry.changes && Object.keys(entry.changes).length > 0 && (
+                    <div className="edit-history-changes">
+                      {Object.entries(entry.changes).map(([field, diff]) => (
+                        <div key={field} className="edit-history-change">
+                          <span className="edit-history-field">{field.replace(/([A-Z])/g, ' $1').trim()}</span>
+                          {diff && diff.from !== undefined ? (
+                            <>
+                              <span className="edit-history-from">{diff.from}</span>
+                              <span className="edit-history-arrow">→</span>
+                              <span className="edit-history-to">{diff.to}</span>
+                            </>
+                          ) : (
+                            <span className="edit-history-to">{typeof diff === 'object' ? JSON.stringify(diff) : String(diff)}</span>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      <RateSetFooter />
     </div>
   );
 }
