@@ -36,7 +36,12 @@ async function ensurePayPeriodsSeeded() {
     for (let index = 0; index < PERIODS_TO_GENERATE; index += 1) {
       const { startDate, endDate } = buildPeriodDates(index);
       await pool.query(
-        `INSERT INTO pay_period (start_date, end_date) VALUES ($1, $2) ON CONFLICT (start_date) DO NOTHING`,
+        `INSERT INTO pay_period (start_date, end_date)
+         SELECT $1, $2
+         WHERE NOT EXISTS (
+           SELECT 1 FROM pay_period WHERE start_date <= $2 AND end_date >= $1
+         )
+         ON CONFLICT (start_date) DO NOTHING`,
         [startDate, endDate]
       );
     }
