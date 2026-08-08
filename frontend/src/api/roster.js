@@ -23,4 +23,8 @@ function simulateSheetDown(payPeriodId) {
   return apiPost("/api/roster/sync", { payPeriodId, simulateFailure: true }, { allowStatuses: [424] });
 }
 
-export { fetchPayPeriods, fetchSyncSummary, fetchSyncHistory, triggerImportNow, simulateSheetDown };
+function resolveException(timesheetRowId, resolution) {
+  return apiPost(`/api/roster/exceptions/${timesheetRowId}/resolve`, resolution);
+}
+
+export { fetchPayPeriods, fetchSyncSummary, fetchSyncHistory, triggerImportNow, simulateSheetDown, resolveException };
