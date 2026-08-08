@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import {
   getAccessToken,
@@ -44,7 +45,12 @@ function PayrollCalcPage() {
   const [loading, setLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState(null);
   const [successMessage, setSuccessMessage] = useState(null);
-  const [activeTab, setActiveTab] = useState('lines'); // lines | adjustments | inputs | rates | runs
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [activeTab, setActiveTabState] = useState(() => searchParams.get('tab') || 'lines');
+  const setActiveTab = (tab) => {
+    setActiveTabState(tab);
+    setSearchParams(tab === 'lines' ? {} : { tab }, { replace: true });
+  };
   const [dataChangedSinceRun, setDataChangedSinceRun] = useState(false);
   // §5.8 resolve loop: which staff member's missing input we're fixing.
   const [resolveStaffId, setResolveStaffId] = useState(null);
@@ -89,6 +95,13 @@ function PayrollCalcPage() {
       if (result.ok) setEditLog(result.data?.data?.edits || []);
     });
   }, [activeTab, linesRefresh]);
+
+  // Sync tab from URL search params (e.g. when clicking sidebar links).
+  useEffect(() => {
+    const tab = searchParams.get('tab');
+    if (tab && tab !== activeTab) setActiveTabState(tab);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams]);
 
   useEffect(() => {
     if (!user) return;
