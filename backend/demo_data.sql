@@ -1,4 +1,0 @@
--- DEPRECATED: retained as a pointer for teammates who used the old command.
--- The former contents targeted the retired singular payroll_line schema.
--- Use the transactional files in src/db/seeds instead: npm run seed
--- No executable statements intentionally remain in this file.

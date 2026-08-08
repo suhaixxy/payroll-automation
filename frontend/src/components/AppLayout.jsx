@@ -9,7 +9,6 @@ import {
   ExpandMoreRounded,
   FactCheckRounded,
   FolderSharedRounded,
-  GroupsRounded,
   LogoutRounded,
   MenuRounded,
   PaymentsRounded,
@@ -176,10 +175,6 @@ function Sidebar({ onNavigate }) {
               </List>
             </Collapse>
             <SidebarLink icon={<ApprovalRounded />} label="Approvals" path="/approvals" active={location.pathname === "/approvals"} onNavigate={onNavigate} />
-            <ListItemButton className="sidebar-link sidebar-link-unavailable" disabled>
-              <ListItemIcon><GroupsRounded /></ListItemIcon>
-              <ListItemText primary="Employees" secondary="Not available" />
-            </ListItemButton>
             <ListItemButton
               className={`sidebar-link sidebar-parent-link${isPaymentRoute ? " sidebar-parent-active" : ""}`}
               onClick={() => setPaymentsOpen((open) => !open)}
