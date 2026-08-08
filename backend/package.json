@@ -1,0 +1,35 @@
+{
+  "name": "payroll-automation-backend",
+  "version": "1.0.0",
+  "description": "Backend for the Automated Payroll Processing System",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "nodemon src/server.js",
+    "test": "jest --runInBand",
+    "migrate": "node src/db/migrate.js",
+    "seed": "node src/db/seed.js"
+  },
+  "dependencies": {
+    "bcrypt": "^6.0.0",
+    "cors": "^2.8.5",
+    "csv-parse": "^7.0.2",
+    "csv-stringify": "^6.8.2",
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2",
+    "express-rate-limit": "^8.6.2",
+    "helmet": "^8.3.0",
+    "jsonwebtoken": "^9.0.3",
+    "pdfkit": "^0.19.1",
+    "pg": "^8.12.0",
+    "pg-hstore": "^2.3.4",
+    "sequelize": "^6.37.8",
+    "yup": "^1.7.1"
+  },
+  "devDependencies": {
+    "jest": "^29.7.0",
+    "nodemon": "^3.1.4",
+    "sequelize-cli": "^6.6.5",
+    "supertest": "^7.2.2"
+  }
+}
