@@ -10,7 +10,8 @@ const request = require('supertest');
 const app = require('../src/app');
 const { pool } = require('../src/config/database');
 const { initializeDatabase } = require('../src/db/initializeDatabase');
-const { sequelize, syncUc003Tables, PayRate, User } = require('../src/models');
+const { sequelize, PayRate } = require('../src/models');
+const { createAndLogin, deleteTestUsers } = require('./helpers/authFixtures');
 
 const ACCOUNTING_EMAIL = 'uc003-adj-accounting@test.local';
 const MANAGER_EMAIL = 'uc003-adj-manager@test.local';
@@ -25,9 +26,7 @@ let bonusId;
 let deductionId;
 
 async function registerAndLogin(name, email, role) {
-  await request(app).post('/api/user/register').send({ name, email, password: PASSWORD, role });
-  const login = await request(app).post('/api/user/login').send({ email, password: PASSWORD });
-  return login.body.accessToken;
+  return createAndLogin(app, { name, email, password: PASSWORD, role });
 }
 
 async function cleanup() {
@@ -53,22 +52,17 @@ async function cleanup() {
   }
   await pool.query(`DELETE FROM cpf_rate_bands WHERE rate_set_id = $1`, [TEST_RATE_SET_ID]);
   await pool.query(`DELETE FROM statutory_rate_sets WHERE id = $1`, [TEST_RATE_SET_ID]);
-  await pool.query(
-    `DELETE FROM uc003_audit_log WHERE actor_id IN (SELECT id FROM users WHERE email = ANY($1))`,
-    [[ACCOUNTING_EMAIL, MANAGER_EMAIL]]
-  );
-  await User.destroy({ where: { email: [ACCOUNTING_EMAIL, MANAGER_EMAIL] } });
+  await deleteTestUsers(pool, [ACCOUNTING_EMAIL, MANAGER_EMAIL]);
 }
 
 beforeAll(async () => {
   await initializeDatabase();
-  await syncUc003Tables();
   await cleanup();
 
-  accountingToken = await registerAndLogin('Adj Accounting', ACCOUNTING_EMAIL, 'accounting');
+  accountingToken = await registerAndLogin('Adj Employee', ACCOUNTING_EMAIL, 'employee');
   managerToken = await registerAndLogin('Adj Manager', MANAGER_EMAIL, 'manager');
 
-  const { rows: userRows } = await pool.query(`SELECT id FROM users WHERE email = $1`, [MANAGER_EMAIL]);
+  const { rows: userRows } = await pool.query(`SELECT id FROM user_account WHERE email = $1`, [MANAGER_EMAIL]);
   await pool.query(
     `INSERT INTO statutory_rate_sets
        (id, version_label, effective_from, effective_to, sdl_rate, sdl_min, sdl_max,
@@ -226,7 +220,7 @@ describe('CRUD lifecycle (§4.1–4.6)', () => {
   });
 
   test('§5.4 fold-in: calculate applies adjustments to gross and CPF wage base', async () => {
-    const run = await asAccounting(request(app).post(`/api/uc003/periods/${periodId}/calculate`));
+    const run = await asManager(request(app).post(`/api/uc003/periods/${periodId}/calculate`));
     expect(run.status).toBe(201);
 
     const lines = await asAccounting(
@@ -260,7 +254,7 @@ describe('CRUD lifecycle (§4.1–4.6)', () => {
     expect(rows[0].deleted_at).not.toBeNull();
 
     // Recalculate: only the bonus remains -> gross 862, net 690.
-    await asAccounting(request(app).post(`/api/uc003/periods/${periodId}/recalculate`));
+    await asManager(request(app).post(`/api/uc003/periods/${periodId}/recalculate`));
     const lines = await asAccounting(
       request(app).get(`/api/uc003/periods/${periodId}/lines?search=T-ADJ1`)
     );

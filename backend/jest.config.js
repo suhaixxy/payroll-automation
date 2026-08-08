@@ -5,10 +5,9 @@ module.exports = {
 
   testPathIgnorePatterns: ["/node_modules/"],
 
-  roots: [
-    path.resolve(__dirname, "tests"),
-    path.resolve(__dirname, "../tests"),
-  ],
+  roots: [path.resolve(__dirname, "tests")],
+
+  setupFiles: [path.resolve(__dirname, "tests/setup/testDatabaseGuard.js")],
 
   moduleNameMapper: {
     "^supertest$": require.resolve("supertest"),

@@ -8,7 +8,7 @@ const {
   calculateCpfCents,
   calculateSdlCents,
   calculateLine,
-} = require('../calculationEngine');
+} = require('../src/services/calculationEngine');
 
 // Mirrors the seeded 2026-01 rate set (030_uc003_seed.sql) in the integer
 // basis-point/cents form produced by rateSetService.

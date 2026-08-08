@@ -14,8 +14,8 @@ const { pool } = require('../config/database');
  * @param {string} entry.action - 'create'|'update'|'delete'|'calculate'|'void'|'submit'.
  * @param {object|null} [entry.before] - row state before the change (null on create).
  * @param {object|null} [entry.after] - row state after the change (null on delete).
- * @param {string} entry.actorId - users.id of who did it.
- * @param {string} entry.actorRole - their role at the time ('manager'|'accounting').
+ * @param {string} entry.actorId - user_account.id of who did it.
+ * @param {string} entry.actorRole - their authenticated role at the time.
  */
 async function logUc003Action({ entity, entityId = null, action, before = null, after = null, actorId, actorRole }) {
   await pool.query(

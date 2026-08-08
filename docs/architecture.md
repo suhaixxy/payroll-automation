@@ -11,7 +11,7 @@ UC-001: Import & Sync Roster Hours - writes to staff, timesheet
       down to
 UC-002: Validate & Consolidate Timesheets - writes to timesheet_exception, freezes timesheet
       down to
-UC-003: Calculate Payroll & Incentives - writes to payroll_line
+UC-003: Calculate Payroll & Incentives - writes versioned calculation_runs and payroll_lines
       down to
 UC-004: Review & Approve Payroll - writes to approval
       down to
@@ -43,7 +43,9 @@ payroll-automation/
     - components/ - shared UI pieces
 
 ## Database Schema (11 tables)
-staff, pay_period, audit_log, timesheet, timesheet_exception, pay_rate, incentive_scheme, performance_input, payroll_line, approval, payment_batch
+staff, pay_period, audit_log, timesheet, timesheet_exception, pay_rate,
+statutory_rate_sets, performance_inputs, payroll_adjustments, calculation_runs,
+payroll_lines, approval, payment_batch, payment_batch_item, payslip, user_account
 
 Shared foundation tables (staff, pay_period, audit_log) support all UCs. Each UC has its own dedicated table(s) built on top.
 

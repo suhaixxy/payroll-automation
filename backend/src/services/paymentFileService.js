@@ -66,6 +66,7 @@ exports.generate = async ({ payPeriodId, user, ipAddress }) => {
         const readiness = await readinessService.assess(payPeriodId, transaction);
         createdBatch = await PaymentBatch.create({
             pay_period_id: payPeriodId,
+            calculation_run_id: readiness.calculationRunId,
             batch_reference: generateReference("PAY"),
             file_format: "giro",
             employee_count: readiness.payrollLines.length,
@@ -84,10 +85,10 @@ exports.generate = async ({ payPeriodId, user, ipAddress }) => {
             employee_name: line.staff.full_name,
             bank_code: line.staff.bank_code,
             bank_account_no: line.staff.bank_account_no,
-            gross_pay: line.gross_pay,
-            incentive_pay: line.incentive_pay,
-            cpf_amount: line.cpf_amount,
-            sdl_amount: line.sdl_amount,
+            gross_pay: Number(line.gross_total) - Number(line.incentive_amount),
+            incentive_pay: line.incentive_amount,
+            cpf_amount: line.cpf_employee,
+            sdl_amount: line.sdl,
             other_deduction: 0,
             net_pay: line.net_pay,
             payment_reference: `${createdBatch.batch_reference}-${line.staff.external_ref}`,
@@ -164,7 +165,8 @@ exports.cancel = async ({ batchId, reason, user, ipAddress }) => {
     if (!batch) throw new AppError(404, "PAYMENT_BATCH_NOT_FOUND", "Payment batch not found.");
     if (!["generated", "hrms_sync_failed"].includes(batch.status)) throw new AppError(409, "INVALID_CANCELLATION", "Only generated or HRMS-failed batches may be cancelled.");
     await batch.update({ status: "cancelled", cancelled_by: user.id, cancelled_at: new Date(), cancellation_reason: reason });
-    await PayPeriod.update({ status: "approved" }, { where: { id: batch.pay_period_id, status: { [Op.ne]: "payment_ready" } } });
+    // Cancellation is a payment-batch state; the approved, locked payroll
+    // period remains unchanged and can be used to generate a replacement.
     await auditService.record({ user, action: "PAYMENT_BATCH_CANCELLED", entityType: "payment_batch", entityId: batch.id, ipAddress, details: { reason } });
     return serializeBatch(batch);
 };

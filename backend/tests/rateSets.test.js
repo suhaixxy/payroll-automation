@@ -10,7 +10,8 @@ const request = require('supertest');
 const app = require('../src/app');
 const { pool } = require('../src/config/database');
 const { initializeDatabase } = require('../src/db/initializeDatabase');
-const { sequelize, syncUc003Tables, User } = require('../src/models');
+const { sequelize } = require('../src/models');
+const { createAndLogin, deleteTestUsers } = require('./helpers/authFixtures');
 
 const ACCOUNTING_EMAIL = 'uc003-rs-accounting@test.local';
 const MANAGER_EMAIL = 'uc003-rs-manager@test.local';
@@ -39,9 +40,7 @@ const VALID_BODY = {
 };
 
 async function registerAndLogin(name, email, role) {
-  await request(app).post('/api/user/register').send({ name, email, password: PASSWORD, role });
-  const login = await request(app).post('/api/user/login').send({ email, password: PASSWORD });
-  return login.body.accessToken;
+  return createAndLogin(app, { name, email, password: PASSWORD, role });
 }
 
 async function cleanup() {
@@ -59,19 +58,14 @@ async function cleanup() {
       supersededSetId,
     ]);
   }
-  await pool.query(
-    `DELETE FROM uc003_audit_log WHERE actor_id IN (SELECT id FROM users WHERE email = ANY($1))`,
-    [[ACCOUNTING_EMAIL, MANAGER_EMAIL]]
-  );
-  await User.destroy({ where: { email: [ACCOUNTING_EMAIL, MANAGER_EMAIL] } });
+  await deleteTestUsers(pool, [ACCOUNTING_EMAIL, MANAGER_EMAIL]);
 }
 
 beforeAll(async () => {
   await initializeDatabase();
-  await syncUc003Tables();
   await cleanup();
 
-  accountingToken = await registerAndLogin('RS Accounting', ACCOUNTING_EMAIL, 'accounting');
+  accountingToken = await registerAndLogin('RS Employee', ACCOUNTING_EMAIL, 'employee');
   managerToken = await registerAndLogin('RS Manager', MANAGER_EMAIL, 'manager');
 
   const { rows } = await pool.query(

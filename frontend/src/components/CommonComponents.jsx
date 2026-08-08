@@ -19,7 +19,7 @@ function PageHeader({ title, subtitle, actions }) {
 }
 
 const statusColors = {
-  completed: "success", ready: "success", approved: "success", payment_ready: "success",
+  completed: "success", ready: "success", approved: "success", paid: "success",
   failed: "error", hrms_sync_failed: "error", blocked: "error", cancelled: "default",
   pending: "warning", hrms_sync_pending: "warning", generating: "info", generated: "info",
 };

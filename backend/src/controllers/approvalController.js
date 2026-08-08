@@ -33,13 +33,15 @@ async function getLineDetail(req, res, next) {
 
 async function submitDecision(req, res, next) {
   try {
-    const result = await approvalService.submitDecision(req.body);
+    const result = await approvalService.submitDecision(req.body, req.user);
     const statuses = {
       VALIDATION_ERROR: 400,
       COMMENT_REQUIRED: 422,
       NOT_FOUND: 404,
       INVALID_STATUS: 409,
       INCOMPLETE_LINES: 409,
+      RUN_NOT_FOUND: 404,
+      STALE_RUN: 409,
     };
     if (statuses[result.error]) return res.status(statuses[result.error]).json(result);
     res.status(201).json(result);

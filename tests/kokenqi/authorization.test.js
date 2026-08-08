@@ -15,7 +15,7 @@ describe("Role authorization", () => {
             .set("Authorization", `Bearer ${token}`)
             .send({ payPeriodId: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa" });
         expect(response.status).toBe(403);
-        expect(response.body.error).toBe("FORBIDDEN");
+        expect(response.body.error.code).toBe("FORBIDDEN");
     });
 
     test("manager passes role middleware on a payment route", async () => {
@@ -24,7 +24,7 @@ describe("Role authorization", () => {
             .get("/api/payments/00000000-0000-0000-0000-000000000000/file")
             .set("Authorization", `Bearer ${token}`);
         expect(response.status).toBe(404);
-        expect(response.body.error).toBe("PAYMENT_BATCH_NOT_FOUND");
+        expect(response.body.error.code).toBe("PAYMENT_BATCH_NOT_FOUND");
     });
 });
 

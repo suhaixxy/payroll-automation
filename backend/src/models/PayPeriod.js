@@ -17,10 +17,10 @@ module.exports = (sequelize, DataTypes) => {
             type: DataTypes.ENUM(
                 "draft",
                 "validated",
-                "pending_calculation",
+                "calculated",
                 "pending_approval",
                 "approved",
-                "payment_ready"
+                "paid"
             ),
             defaultValue: "draft"
         },

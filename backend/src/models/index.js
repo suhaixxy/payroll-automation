@@ -19,8 +19,8 @@ const db = {
 db.User.belongsTo(db.Staff, { foreignKey: "staff_id", as: "staff" });
 db.Staff.hasOne(db.User, { foreignKey: "staff_id", as: "user" });
 
-db.PayPeriod.hasMany(db.PayrollLine, { foreignKey: "pay_period_id", as: "payrollLines" });
-db.PayrollLine.belongsTo(db.PayPeriod, { foreignKey: "pay_period_id", as: "payPeriod" });
+db.PayPeriod.hasMany(db.PayrollLine, { foreignKey: "period_id", as: "payrollLines" });
+db.PayrollLine.belongsTo(db.PayPeriod, { foreignKey: "period_id", as: "payPeriod" });
 db.Staff.hasMany(db.PayrollLine, { foreignKey: "staff_id", as: "payrollLines" });
 db.PayrollLine.belongsTo(db.Staff, { foreignKey: "staff_id", as: "staff" });
 

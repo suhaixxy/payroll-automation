@@ -1,10 +1,7 @@
 import {
   AccountCircleRounded,
-  ApprovalRounded,
   CalculateRounded,
-  CalendarMonthRounded,
   BadgeRounded,
-  CalculateRounded,
   DashboardRounded,
   DescriptionRounded,
   ExpandLessRounded,
@@ -127,10 +124,6 @@ function Sidebar({ onNavigate }) {
         {isManager && (
           <>
             <SidebarLink icon={<DashboardRounded />} label="Dashboard" path="/dashboard" active={location.pathname === "/dashboard"} onNavigate={onNavigate} />
-            <SidebarLink icon={<GroupsRounded />} label="Roster" path="/roster" active={location.pathname === "/roster"} onNavigate={onNavigate} />
-            <SidebarLink icon={<TodayRounded />} label="Timesheets" path="/timesheets" active={location.pathname === "/timesheets"} onNavigate={onNavigate} />
-            <SidebarLink icon={<CalculateRounded />} label="Payroll Calculation" path="/payroll" active={location.pathname === "/payroll"} onNavigate={onNavigate} />
-            <SidebarLink icon={<ApprovalRounded />} label="Approvals" path="/approvals" active={location.pathname === "/approvals"} onNavigate={onNavigate} />
             <ListItemButton
               className={`sidebar-link sidebar-parent-link${isRosterStaffRoute ? " sidebar-parent-active" : ""}`}
               onClick={() => setRosterStaffOpen((open) => !open)}
