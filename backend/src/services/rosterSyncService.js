@@ -218,7 +218,7 @@ async function getLastSyncResult(payPeriodId) {
   }
 
   const { rows } = await pool.query(
-    `SELECT s.external_ref AS staff_ext_ref, s.full_name,
+    `SELECT t.id, s.external_ref AS staff_ext_ref, s.full_name,
             t.roster_raw_name, to_char(t.shift_date, 'YYYY-MM-DD') AS shift_date,
             t.total_hours, t.match_status, t.match_method, t.clock_in, t.clock_out, t.updated_at
      FROM timesheet t
@@ -266,6 +266,7 @@ async function getLastSyncResult(payPeriodId) {
   const unmatched = rows
     .filter((row) => row.match_status === "unmatched")
     .map((row) => ({
+      id: row.id,
       rosterRawName: row.roster_raw_name,
       date: row.shift_date,
       hours: Number(row.total_hours),
@@ -274,6 +275,7 @@ async function getLastSyncResult(payPeriodId) {
   const invalidTime = rows
     .filter((row) => row.match_status === "invalid_time")
     .map((row) => ({
+      id: row.id,
       rosterRawName: row.roster_raw_name || row.full_name,
       date: row.shift_date,
     }));
@@ -295,10 +297,92 @@ async function getLastSyncResult(payPeriodId) {
   };
 }
 
+async function resolveException(timesheetRowId, resolution) {
+  const rowResult = await pool.query(
+    `SELECT id, staff_id, match_status, is_frozen
+     FROM timesheet
+     WHERE id = $1`,
+    [timesheetRowId]
+  );
+  const row = rowResult.rows[0];
+
+  if (!row) {
+    return {
+      success: false,
+      error: "TIMESHEET_ROW_NOT_FOUND",
+      message: "The timesheet row does not exist",
+    };
+  }
+  if (row.is_frozen) {
+    return {
+      success: false,
+      error: "TIMESHEET_ROW_FROZEN",
+      message: "Frozen timesheet rows cannot be resolved",
+    };
+  }
+
+  if (resolution?.ignore === true) {
+    await pool.query(
+      `UPDATE timesheet
+       SET match_status = 'ignored', updated_at = now()
+       WHERE id = $1`,
+      [timesheetRowId]
+    );
+    return { success: true, timesheetRowId, resolution: "ignored" };
+  }
+
+  if (resolution?.staffId) {
+    const staffResult = await pool.query(
+      "SELECT id FROM staff WHERE id = $1 AND status = 'active'",
+      [resolution.staffId]
+    );
+    if (!staffResult.rows[0]) {
+      return {
+        success: false,
+        error: "STAFF_NOT_FOUND_OR_INACTIVE",
+        message: "The selected staff member does not exist or is inactive",
+      };
+    }
+
+    await pool.query(
+      `UPDATE timesheet
+       SET staff_id = $1, roster_raw_name = NULL, match_status = 'matched', match_method = 'manual', updated_at = now()
+       WHERE id = $2`,
+      [resolution.staffId, timesheetRowId]
+    );
+    return { success: true, timesheetRowId, resolution: "staff_linked" };
+  }
+
+  if (row.match_status === "invalid_time" && resolution?.clockIn !== undefined && resolution?.clockOut !== undefined) {
+    const hours = calculateHours(resolution.clockIn, resolution.clockOut);
+    if (Number.isNaN(hours)) {
+      return {
+        success: false,
+        error: "INVALID_CLOCK_TIMES",
+        message: "Clock-in and clock-out must be valid 24-hour times",
+      };
+    }
+
+    await pool.query(
+      `UPDATE timesheet
+       SET clock_in = $1, clock_out = $2, total_hours = $3, match_status = 'matched', updated_at = now()
+       WHERE id = $4`,
+      [resolution.clockIn, resolution.clockOut, hours, timesheetRowId]
+    );
+    return { success: true, timesheetRowId, resolution: "clock_times_updated" };
+  }
+
+  return {
+    success: false,
+    error: "INVALID_EXCEPTION_RESOLUTION",
+    message: "Provide an active staffId, ignore: true, or clockIn and clockOut for an invalid-time row",
+  };
+}
+
 // Recent sync events for this pay period (both scheduled and manual), for
 // the "Sync History" panel on the frontend.
 async function getSyncHistory(payPeriodId, limit = 10) {
   return auditService.getHistory("pay_period", payPeriodId, limit);
 }
 
-module.exports = { runRosterSync, getLastSyncResult, getSyncHistory };
+module.exports = { runRosterSync, getLastSyncResult, getSyncHistory, resolveException };

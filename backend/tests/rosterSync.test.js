@@ -10,7 +10,7 @@ const { fetchRosterRows } = require("../src/adapters/googleSheetsAdapter");
 const payPeriodService = require("../src/services/payPeriodService");
 const auditService = require("../src/services/auditService");
 const { calculateHours } = require("../src/utils/hoursCalculator");
-const { runRosterSync } = require("../src/services/rosterSyncService");
+const { runRosterSync, resolveException } = require("../src/services/rosterSyncService");
 
 const payPeriodId = "11111111-1111-1111-1111-111111111111";
 const client = { query: jest.fn(), release: jest.fn() };
@@ -149,5 +149,55 @@ describe("runRosterSync", () => {
 
     expect(result).toMatchObject({ success: false, error: "ACTIVE_PAY_PERIOD_NOT_FOUND" });
     expect(fetchRosterRows).not.toHaveBeenCalled();
+  });
+});
+
+describe("resolveException", () => {
+  test("links an unmatched row to an active staff member", async () => {
+    const timesheetRowId = "22222222-2222-2222-2222-222222222222";
+    const staffId = "33333333-3333-3333-3333-333333333333";
+    pool.query
+      .mockResolvedValueOnce({ rows: [{ id: timesheetRowId, match_status: "unmatched", is_frozen: false }] })
+      .mockResolvedValueOnce({ rows: [{ id: staffId }] })
+      .mockResolvedValueOnce({ rows: [] });
+
+    const result = await resolveException(timesheetRowId, { staffId });
+
+    expect(result).toEqual({ success: true, timesheetRowId, resolution: "staff_linked" });
+    expect(pool.query).toHaveBeenLastCalledWith(expect.stringContaining("match_method = 'manual'"), [staffId, timesheetRowId]);
+  });
+
+  test("updates clock times for an invalid-time row", async () => {
+    const timesheetRowId = "22222222-2222-2222-2222-222222222222";
+    pool.query
+      .mockResolvedValueOnce({ rows: [{ id: timesheetRowId, match_status: "invalid_time", is_frozen: false }] })
+      .mockResolvedValueOnce({ rows: [] });
+
+    const result = await resolveException(timesheetRowId, { clockIn: "08:30", clockOut: "17:00" });
+
+    expect(result).toEqual({ success: true, timesheetRowId, resolution: "clock_times_updated" });
+    expect(pool.query).toHaveBeenLastCalledWith(expect.stringContaining("total_hours = $3"), ["08:30", "17:00", 8.5, timesheetRowId]);
+  });
+
+  test("permanently ignores an exception row", async () => {
+    const timesheetRowId = "22222222-2222-2222-2222-222222222222";
+    pool.query
+      .mockResolvedValueOnce({ rows: [{ id: timesheetRowId, match_status: "unmatched", is_frozen: false }] })
+      .mockResolvedValueOnce({ rows: [] });
+
+    const result = await resolveException(timesheetRowId, { ignore: true });
+
+    expect(result).toEqual({ success: true, timesheetRowId, resolution: "ignored" });
+    expect(pool.query).toHaveBeenLastCalledWith(expect.stringContaining("match_status = 'ignored'"), [timesheetRowId]);
+  });
+
+  test("rejects resolving a frozen timesheet row", async () => {
+    const timesheetRowId = "22222222-2222-2222-2222-222222222222";
+    pool.query.mockResolvedValueOnce({ rows: [{ id: timesheetRowId, match_status: "unmatched", is_frozen: true }] });
+
+    const result = await resolveException(timesheetRowId, { ignore: true });
+
+    expect(result).toMatchObject({ success: false, error: "TIMESHEET_ROW_FROZEN" });
+    expect(pool.query).toHaveBeenCalledTimes(1);
   });
 });

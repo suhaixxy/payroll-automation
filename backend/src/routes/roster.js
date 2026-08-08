@@ -8,5 +8,6 @@ const router = express.Router();
 router.post("/sync", rosterController.importNow);
 router.get("/sync/summary", rosterController.getSyncSummary);
 router.get("/sync/history", rosterController.getSyncHistory);
+router.patch("/exceptions/:timesheetRowId/resolve", rosterController.resolveException);
 
 module.exports = router;
