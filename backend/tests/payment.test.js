@@ -177,6 +177,35 @@ describe("Payment readiness", () => {
         expect(response.body.error.code).toBe("MISSING_BANK_DETAILS");
         expect(await PaymentBatch.count({ where: { pay_period_id: data.payPeriodId } })).toBe(0);
     });
+
+    test("invalid bank details appear in preview and block generation", async () => {
+        const data = await fixture();
+        await data.staff.update({ bank_code: "!", bank_account_no: "12" });
+
+        const preview = await auth("get", `/api/payments/preview?payPeriodId=${data.payPeriodId}`);
+        expect(preview.status).toBe(200);
+        expect(preview.body.ready).toBe(false);
+        expect(preview.body.employees[0]).toMatchObject({
+            bankValidationStatus: "invalid",
+            bankValidationReason: "Bank code format is invalid.",
+        });
+
+        const generated = await auth("post", "/api/payments/generate").send({ payPeriodId: data.payPeriodId });
+        expect(generated.status).toBe(424);
+        expect(generated.body.error.code).toBe("INVALID_BANK_DETAILS");
+        expect(await PaymentBatch.count({ where: { pay_period_id: data.payPeriodId } })).toBe(0);
+    });
+
+    test("nonexistent pay period is rejected by preview and generation", async () => {
+        const payPeriodId = nextUuid();
+        const preview = await auth("get", `/api/payments/preview?payPeriodId=${payPeriodId}`);
+        expect(preview.status).toBe(404);
+        expect(preview.body.error.code).toBe("PAY_PERIOD_NOT_FOUND");
+
+        const generated = await auth("post", "/api/payments/generate").send({ payPeriodId });
+        expect(generated.status).toBe(404);
+        expect(generated.body.error.code).toBe("PAY_PERIOD_NOT_FOUND");
+    });
 });
 
 describe("Payment generation and secured CSV", () => {
@@ -243,6 +272,12 @@ describe("Payment generation and secured CSV", () => {
         expect(response.status).toBe(200);
         expect(response.body.items[0].bankAccountNumber).toMatch(/^XXXX/);
         expect(response.body.items[0].bankAccountNumber).not.toBe(data.staff.bank_account_no);
+    });
+
+    test("nonexistent batch details return PAYMENT_BATCH_NOT_FOUND", async () => {
+        const response = await auth("get", `/api/payments/${nextUuid()}`);
+        expect(response.status).toBe(404);
+        expect(response.body.error.code).toBe("PAYMENT_BATCH_NOT_FOUND");
     });
 
     test("history search and dashboard statistics return generated batches", async () => {
@@ -375,6 +410,14 @@ describe("HRMS failure, retry, and cancellation", () => {
         expect(response.body.error.code).toBe("INVALID_CANCELLATION");
     });
 
+    test("completed batch cannot be retried through HRMS", async () => {
+        const data = await fixture();
+        const generated = await auth("post", "/api/payments/generate").send({ payPeriodId: data.payPeriodId });
+        const response = await auth("post", `/api/payments/${generated.body.data.id}/retry-hrms`).send({});
+        expect(response.status).toBe(409);
+        expect(response.body.error.code).toBe("INVALID_HRMS_RETRY");
+    });
+
     test("HRMS-failed batch can be soft-cancelled", async () => {
         const data = await fixture();
         process.env.HRMS_SIMULATE_FAILURE = "true";
@@ -387,6 +430,25 @@ describe("HRMS failure, retry, and cancellation", () => {
         expect(response.body.data.status).toBe("cancelled");
         expect((await PaymentBatch.findByPk(batchId)).cancelled_at).not.toBeNull();
     });
+
+    test("cancelled batch payment file cannot be downloaded", async () => {
+        const data = await fixture();
+        process.env.HRMS_SIMULATE_FAILURE = "true";
+        await auth("post", "/api/payments/generate").send({ payPeriodId: data.payPeriodId });
+        process.env.HRMS_SIMULATE_FAILURE = "false";
+        const batch = await PaymentBatch.findOne({ where: { pay_period_id: data.payPeriodId } });
+        await auth("patch", `/api/payments/${batch.id}/cancel`).send({ reason: "Cancel before file download" });
+
+        const response = await auth("get", `/api/payments/${batch.id}/file`);
+        expect(response.status).toBe(409);
+        expect(response.body.error.code).toBe("PAYMENT_BATCH_CANCELLED");
+    });
+
+    test("cancelling a nonexistent Payment Batch returns PAYMENT_BATCH_NOT_FOUND", async () => {
+        const response = await auth("patch", `/api/payments/${nextUuid()}/cancel`).send({ reason: "Valid cancellation reason" });
+        expect(response.status).toBe(404);
+        expect(response.body.error.code).toBe("PAYMENT_BATCH_NOT_FOUND");
+    });
 });
 
 describe("Missing bank management", () => {
@@ -397,5 +459,14 @@ describe("Missing bank management", () => {
         expect(response.body.data.bankAccountNumber).toBe("XXXX6655");
         const audit = await AuditLog.findOne({ where: { action: "BANK_DETAILS_UPDATED", entity_id: data.staff.id } });
         expect(JSON.stringify(audit.details)).not.toContain("9988776655");
+    });
+
+    test("updating bank details for nonexistent staff returns STAFF_NOT_FOUND", async () => {
+        const response = await auth("patch", `/api/staff/${nextUuid()}/bank-details`).send({
+            bankCode: "7339",
+            bankAccountNumber: "9988776655",
+        });
+        expect(response.status).toBe(404);
+        expect(response.body.error.code).toBe("STAFF_NOT_FOUND");
     });
 });

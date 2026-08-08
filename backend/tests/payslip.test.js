@@ -2,7 +2,7 @@ const request = require("supertest");
 const app = require("../src/app");
 const {
     sequelize, PayPeriod, PayrollLine, Approval, PaymentBatch,
-    PaymentBatchItem, Payslip, AuditLog,
+    PaymentBatchItem, Payslip, AuditLog, User,
 } = require("../src/models");
 
 const EMPLOYEE_STAFF_ID = "11111111-1111-1111-1111-111111111111";
@@ -94,6 +94,14 @@ describe("Automatic payslip generation", () => {
         expect(response.body.rows[0].employeeReference).toBe("S001");
     });
 
+    test("nonexistent Payment Batch payslip list returns PAYMENT_BATCH_NOT_FOUND", async () => {
+        const response = await request(app)
+            .get("/api/payments/00000000-0000-4000-8000-000000009999/payslips")
+            .set(bearer(managerToken));
+        expect(response.status).toBe(404);
+        expect(response.body.error.code).toBe("PAYMENT_BATCH_NOT_FOUND");
+    });
+
     test("manager can list backend-driven payslips with status and payment metadata", async () => {
         const response = await request(app).get("/api/payslips").set(bearer(managerToken));
         expect(response.status).toBe(200);
@@ -131,6 +139,39 @@ describe("Payslip ownership and protected PDF", () => {
         expect(response.status).toBe(200);
         expect(response.body.rows.some((payslip) => payslip.id === payslipId)).toBe(true);
         expect(response.body.rows.every((payslip) => payslip.staffId === EMPLOYEE_STAFF_ID)).toBe(true);
+    });
+
+    test("employee account without linked staff cannot list own payslips", async () => {
+        const source = await User.findOne({ where: { email: "employee@payroll.local" } });
+        const unlinked = await User.create({
+            id: "81000000-0000-4000-8000-000000009999",
+            full_name: "Unlinked Test Employee",
+            email: "unlinked-employee-test@payroll.local",
+            password_hash: source.password_hash,
+            role: "employee",
+            staff_id: null,
+            status: "active",
+        });
+        try {
+            const login = await request(app).post("/api/auth/login").send({
+                email: unlinked.email,
+                password: "Employee123!",
+            });
+            const response = await request(app).get("/api/payslips/me").set(bearer(login.body.accessToken));
+            expect(response.status).toBe(403);
+            expect(response.body.error.code).toBe("PAYSLIP_ACCESS_DENIED");
+        } finally {
+            await AuditLog.destroy({ where: { user_id: unlinked.id }, force: true });
+            await unlinked.destroy({ force: true });
+        }
+    });
+
+    test("nonexistent payslip returns PAYSLIP_NOT_FOUND", async () => {
+        const response = await request(app)
+            .get("/api/payslips/00000000-0000-4000-8000-000000009999")
+            .set(bearer(managerToken));
+        expect(response.status).toBe(404);
+        expect(response.body.error.code).toBe("PAYSLIP_NOT_FOUND");
     });
 
     test("employee cannot view another employee's payslip", async () => {
