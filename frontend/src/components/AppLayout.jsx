@@ -1,7 +1,8 @@
 import {
   AccountCircleRounded,
-  CalculateRounded,
+  ApprovalRounded,
   BadgeRounded,
+  CalculateRounded,
   DashboardRounded,
   DescriptionRounded,
   ExpandLessRounded,
@@ -43,6 +44,14 @@ import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 
 const drawerWidth = 270;
+
+const payrollLinks = [
+  { label: "Payroll Lines", path: "/payroll?tab=lines", icon: <PlaylistAddCheckRounded /> },
+  { label: "Adjustments", path: "/payroll?tab=adjustments", icon: <FolderSharedRounded /> },
+  { label: "Performance Inputs", path: "/payroll?tab=inputs", icon: <FactCheckRounded /> },
+  { label: "Run History", path: "/payroll?tab=runs", icon: <TimerRounded /> },
+  { label: "Edit Log", path: "/payroll?tab=editlog", icon: <DescriptionRounded /> },
+];
 
 const paymentLinks = [
   { label: "Payment Preview", path: "/payments/preview", icon: <PlaylistAddCheckRounded /> },
@@ -96,8 +105,10 @@ function Sidebar({ onNavigate }) {
     paymentLinks.some(({ path }) => location.pathname === path) ||
     /^\/payments\/[^/]+$/.test(location.pathname);
   const isRosterStaffRoute = rosterStaffLinks.some(({ path }) => location.pathname === path);
+  const isPayrollRoute = location.pathname === "/payroll";
   const [paymentsOpen, setPaymentsOpen] = useState(isPaymentRoute);
   const [rosterStaffOpen, setRosterStaffOpen] = useState(isRosterStaffRoute);
+  const [payrollOpen, setPayrollOpen] = useState(isPayrollRoute);
 
   useEffect(() => {
     if (isPaymentRoute) setPaymentsOpen(true);
@@ -106,6 +117,10 @@ function Sidebar({ onNavigate }) {
   useEffect(() => {
     if (isRosterStaffRoute) setRosterStaffOpen(true);
   }, [isRosterStaffRoute]);
+
+  useEffect(() => {
+    if (isPayrollRoute) setPayrollOpen(true);
+  }, [isPayrollRoute]);
 
   const logout = async () => {
     await signOut();
@@ -142,9 +157,25 @@ function Sidebar({ onNavigate }) {
                 })}
               </List>
             </Collapse>
-            <SidebarLink icon={<TimerRounded />} label="Timesheet Validation" path="/timesheets" active={location.pathname === "/timesheets"} onNavigate={onNavigate} />
-            <SidebarLink icon={<CalculateRounded />} label="Payroll Calc" path="/payroll" active={location.pathname === "/payroll"} onNavigate={onNavigate} />
-            <SidebarLink icon={<FactCheckRounded />} label="Approvals" path="/approvals" active={location.pathname === "/approvals"} onNavigate={onNavigate} />
+            <ListItemButton
+              className={`sidebar-link sidebar-parent-link${isPayrollRoute ? " sidebar-parent-active" : ""}`}
+              onClick={() => setPayrollOpen((open) => !open)}
+              aria-expanded={payrollOpen}
+              aria-controls="payroll-navigation"
+            >
+              <ListItemIcon><CalculateRounded /></ListItemIcon>
+              <ListItemText primary="Payroll Calculation" />
+              {payrollOpen ? <ExpandLessRounded fontSize="small" /> : <ExpandMoreRounded fontSize="small" />}
+            </ListItemButton>
+            <Collapse in={payrollOpen} timeout={180} unmountOnExit>
+              <List id="payroll-navigation" component="div" disablePadding className="sidebar-submenu">
+                {payrollLinks.map((link) => {
+                  const active = location.pathname + (location.search || "") === link.path;
+                  return <SidebarLink key={link.path} {...link} active={active} onNavigate={onNavigate} nested />;
+                })}
+              </List>
+            </Collapse>
+            <SidebarLink icon={<ApprovalRounded />} label="Approvals" path="/approvals" active={location.pathname === "/approvals"} onNavigate={onNavigate} />
             <ListItemButton className="sidebar-link sidebar-link-unavailable" disabled>
               <ListItemIcon><GroupsRounded /></ListItemIcon>
               <ListItemText primary="Employees" secondary="Not available" />
