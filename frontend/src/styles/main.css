@@ -465,3 +465,47 @@ a { color: inherit; }
   .topbar-page-title { font-size: 1.05rem !important; }
   .application-main { padding-inline: 16px; }
 }
+
+/* UC-002 Timesheet Validation
+   Add this section to frontend/src/styles/main.css.
+   It uses the SAME shared theme variables/colors as the rest of the app. */
+.timesheet-validation-page .MuiTypography-h1 { color: #7a0000; }
+.validation-control-card { margin-bottom: 18px; box-shadow: 0 4px 16px rgba(24,24,24,.045) !important; }
+.validation-control-card .MuiCardContent-root { padding: 18px 20px !important; }
+.validation-control-row { display: flex; align-items: center; justify-content: space-between; gap: 18px; }
+.validation-summary-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; margin-bottom: 18px; }
+.validation-summary-card { min-width: 0; box-shadow: 0 4px 15px rgba(24,24,24,.04) !important; }
+.validation-summary-card .MuiCardContent-root { min-height: 132px; display: flex; align-items: flex-start; gap: 16px; padding: 20px !important; }
+.validation-summary-icon { flex: 0 0 auto; width: 48px; height: 48px; display: grid; place-items: center; border-radius: 50%; color: #9b0909; background: #fde7e7; }
+.validation-summary-card.is-success .validation-summary-icon { color: #20843d; background: #e2f5e7; }
+.validation-summary-card.is-warning .validation-summary-icon { color: #de7600; background: #fff0dc; }
+.validation-summary-label { color: #3f3f3f; font-size: .8rem !important; }
+.validation-summary-value { margin-top: 4px !important; font-size: 1.55rem !important; font-weight: 750 !important; line-height: 1.2 !important; }
+.validation-summary-description { display: block; margin-top: 8px !important; color: #666; font-size: .7rem !important; }
+.validation-bulk-alert { margin-bottom: 18px; border: 1px solid #d9e5f5; background: #f7fbff !important; }
+.validation-table-card { overflow: hidden; box-shadow: 0 4px 16px rgba(24,24,24,.045) !important; }
+.validation-table-toolbar { min-height: 78px; display: flex; align-items: center; justify-content: space-between; gap: 18px; padding: 16px 18px !important; border-bottom: 1px solid var(--border); }
+.validation-table-toolbar h2 { font-size: .98rem; font-weight: 700; }
+.validation-filter-row { display: flex; align-items: center; gap: 10px; }
+.validation-filter-row .MuiTextField-root { min-width: 220px; }
+.validation-table-card .MuiTable-root { min-width: 980px; }
+.validation-table-card .MuiTableCell-root { padding: 13px 14px; font-size: .76rem; vertical-align: top; }
+.validation-shift-list, .validation-exception-list { display: grid; gap: 6px; }
+.validation-exception-item { display: grid; gap: 4px; max-width: 360px; white-space: normal; }
+.validation-footer-actions { display: flex; justify-content: space-between; gap: 12px; margin-top: 18px; }
+.validation-audit-card { margin-top: 18px; box-shadow: 0 4px 16px rgba(24,24,24,.045) !important; }
+.validation-card-heading { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+.validation-audit-list { margin-top: 16px; border: 1px solid var(--border); border-radius: 9px; overflow: hidden; }
+.validation-audit-row { display: flex; justify-content: space-between; gap: 18px; padding: 12px 14px; border-bottom: 1px solid var(--border); }
+.validation-audit-row:last-child { border-bottom: 0; }
+
+@media (max-width: 1100px) {
+  .validation-summary-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .validation-table-toolbar { align-items: flex-start; flex-direction: column; }
+}
+
+@media (max-width: 700px) {
+  .validation-control-row, .validation-filter-row, .validation-footer-actions { align-items: stretch; flex-direction: column; }
+  .validation-summary-grid { grid-template-columns: 1fr; }
+  .validation-filter-row .MuiTextField-root { min-width: 0; width: 100%; }
+}
