@@ -7,6 +7,7 @@ function ExceptionList({ items, variant = "unmatched", activeStaff = [], onResol
   const [timeValues, setTimeValues] = useState({});
   const [resolvingId, setResolvingId] = useState(null);
   const [errorMessage, setErrorMessage] = useState("");
+  const [successMessage, setSuccessMessage] = useState("");
 
   if (!items?.length) {
     return <p className="roster-empty">{invalidTime ? "No data issues found." : "No unmatched entries found."}</p>;
@@ -15,8 +16,12 @@ function ExceptionList({ items, variant = "unmatched", activeStaff = [], onResol
   const resolve = async (entry, resolution) => {
     setResolvingId(entry.id);
     setErrorMessage("");
+    setSuccessMessage("");
     try {
       await resolveException(entry.id, resolution);
+      const staffName = activeStaff.find((staff) => staff.id === resolution.staffId)?.fullName;
+      setSuccessMessage(resolution.ignore ? "Entry ignored" : resolution.staffId ? `Linked to ${staffName || "staff member"}` : "Clock times saved");
+      await new Promise((resolveDelay) => setTimeout(resolveDelay, 1200));
       await onResolved?.();
     } catch (error) {
       setErrorMessage(error.message);
@@ -41,18 +46,19 @@ function ExceptionList({ items, variant = "unmatched", activeStaff = [], onResol
                 {activeStaff.map((staff) => <option key={staff.id} value={staff.id}>{staff.fullName}</option>)}
               </select>
               <button type="button" className="roster-primary" onClick={() => resolve(entry, { staffId: staffSelections[entry.id] })} disabled={isResolving || !entry.id || !staffSelections[entry.id]}>Link</button>
-              <button type="button" className="roster-secondary" onClick={() => resolve(entry, { ignore: true })} disabled={isResolving || !entry.id}>Ignore</button>
+              <button type="button" className="roster-secondary" onClick={() => window.confirm("Permanently ignore this entry? This cannot be undone.") && resolve(entry, { ignore: true })} disabled={isResolving || !entry.id}>Ignore</button>
             </div>}
             {invalidTime && <div className="roster-controls">
               <input type="time" value={times.clockIn} onChange={(event) => setTimeValues((current) => ({ ...current, [entry.id]: { ...times, clockIn: event.target.value } }))} disabled={isResolving} aria-label="Clock in" />
               <input type="time" value={times.clockOut} onChange={(event) => setTimeValues((current) => ({ ...current, [entry.id]: { ...times, clockOut: event.target.value } }))} disabled={isResolving} aria-label="Clock out" />
               <button type="button" className="roster-primary" onClick={() => resolve(entry, times)} disabled={isResolving || !entry.id || !times.clockIn || !times.clockOut}>Save</button>
-              <button type="button" className="roster-secondary" onClick={() => resolve(entry, { ignore: true })} disabled={isResolving || !entry.id}>Ignore</button>
+              <button type="button" className="roster-secondary" onClick={() => window.confirm("Permanently ignore this entry? This cannot be undone.") && resolve(entry, { ignore: true })} disabled={isResolving || !entry.id}>Ignore</button>
             </div>}
           </li>
         );
       })}
       {errorMessage && <li className="roster-critical"><small>{errorMessage}</small></li>}
+      {successMessage && <li className="roster-banner roster-info"><small>{successMessage}</small></li>}
     </ul>
   );
 }
