@@ -303,14 +303,16 @@ function AdjustmentsPanel({ periodId, periodStatus, user, onChanged }) {
                     <td className="numeric">
                       <button
                         type="button"
+                        className="row-action"
                         title="Edit"
                         aria-label={`Edit adjustment for ${adjustment.staffName}`}
                         onClick={() => startEdit(adjustment)}
                       >
                         ✎
-                      </button>{' '}
+                      </button>
                       <button
                         type="button"
+                        className="row-action"
                         title="Delete"
                         aria-label={`Delete adjustment for ${adjustment.staffName}`}
                         onClick={() => handleDelete(adjustment)}

@@ -319,14 +319,16 @@ function PerformanceInputsPanel({ periodId, periodStatus, user, resolveStaffId, 
                     <td className="numeric">
                       <button
                         type="button"
+                        className="row-action"
                         title="Edit"
                         aria-label={`Edit ${input.inputType} input for ${input.staffName}`}
                         onClick={() => startEdit(input)}
                       >
                         ✎
-                      </button>{' '}
+                      </button>
                       <button
                         type="button"
+                        className="row-action"
                         title="Delete"
                         aria-label={`Delete ${input.inputType} input for ${input.staffName}`}
                         onClick={() => handleDelete(input)}
