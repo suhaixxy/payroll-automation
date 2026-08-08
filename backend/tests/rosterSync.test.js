@@ -10,17 +10,24 @@ const { fetchRosterRows } = require("../src/adapters/googleSheetsAdapter");
 const payPeriodService = require("../src/services/payPeriodService");
 const auditService = require("../src/services/auditService");
 const { calculateHours } = require("../src/utils/hoursCalculator");
-const { runRosterSync } = require("../src/services/rosterSyncService");
+const { runRosterSync, resolveException, undoException, resetPeriodResolutions } = require("../src/services/rosterSyncService");
 
 const payPeriodId = "11111111-1111-1111-1111-111111111111";
 const client = { query: jest.fn(), release: jest.fn() };
 
-function configureDatabase({ staffById = {}, staffByName = {}, summaryRows = [] } = {}) {
+function configureDatabase({ staffById = {}, staffByName = {}, summaryRows = [], resolvedRows = [] } = {}) {
   let summaryCall = 0;
   pool.connect.mockResolvedValue(client);
   pool.query.mockImplementation(async (sql, params) => {
     if (sql.includes("FROM staff WHERE external_ref")) return { rows: staffById[params[0]] ? [staffById[params[0]]] : [] };
     if (sql.includes("FROM staff WHERE lower(full_name)")) return { rows: staffByName[params[0].toLowerCase()] ? [staffByName[params[0].toLowerCase()]] : [] };
+    if (sql.includes("resolved_manually = true")) {
+      return {
+        rows: sql.includes("to_char(shift_date, 'YYYY-MM-DD') AS shift_date")
+          ? resolvedRows.map((row) => ({ ...row, shift_date: row.shift_date instanceof Date ? row.shift_date.toISOString().slice(0, 10) : row.shift_date }))
+          : resolvedRows,
+      };
+    }
     if (sql.includes("FROM timesheet t")) return { rows: summaryCall++ === 0 ? [] : summaryRows };
     throw new Error(`Unexpected pool query: ${sql}`);
   });
@@ -61,7 +68,7 @@ describe("runRosterSync", () => {
 
     await runRosterSync(payPeriodId);
 
-    expect(pool.query).toHaveBeenCalledTimes(3);
+    expect(pool.query).toHaveBeenCalledTimes(4);
     expect(client.query).toHaveBeenCalledWith(expect.stringContaining("'matched'"), [payPeriodId, "staff-7", "2026-08-01", 9, "id", "08:00", "17:00"]);
   });
 
@@ -85,7 +92,7 @@ describe("runRosterSync", () => {
 
     const result = await runRosterSync(payPeriodId);
 
-    expect(client.query).toHaveBeenCalledWith(expect.stringContaining("'unmatched'"), [payPeriodId, "Unknown Person", "2026-08-01", 8]);
+    expect(client.query).toHaveBeenCalledWith(expect.stringContaining("'unmatched'"), [payPeriodId, "Unknown Person", "2026-08-01", 8, "Unknown Person"]);
     expect(result).toMatchObject({ staffSynced: 0, totalHours: 0, unmatchedCount: 1 });
   });
 
@@ -98,7 +105,7 @@ describe("runRosterSync", () => {
 
     const result = await runRosterSync(payPeriodId);
 
-    expect(client.query).toHaveBeenCalledWith(expect.stringContaining("'invalid_time'"), [payPeriodId, "staff-1", "Andrea Chua (missing clock-in/out)", "2026-08-01"]);
+    expect(client.query).toHaveBeenCalledWith(expect.stringContaining("'invalid_time'"), [payPeriodId, "staff-1", "Andrea Chua (missing clock-in/out)", "2026-08-01", "Andrea Chua"]);
     expect(result.invalidTimeCount).toBe(1);
   });
 
@@ -115,6 +122,38 @@ describe("runRosterSync", () => {
     expect(client.query).toHaveBeenCalledWith("COMMIT");
     expect(auditService.logAction).toHaveBeenCalledWith(expect.objectContaining({ action: "roster_synced", actor: "scheduler", entityId: payPeriodId }));
     expect(result).toMatchObject({ success: true, staffSynced: 1, totalHours: 9 });
+  });
+
+  test("preserves a manually resolved, unfrozen row during a new sync", async () => {
+    configureDatabase({
+      staffById: { S001: { id: "staff-1", staffId: "S001", fullName: "Andrea Chua", status: "active" } },
+      summaryRows: [{ staff_ext_ref: "S001", full_name: "Andrea Chua", total_hours: 9, match_status: "matched", match_method: "manual", shift_date: "2026-08-01", clock_in: "08:00", clock_out: "17:00", is_frozen: false, resolved_manually: true, updated_at: new Date() }],
+    });
+    fetchRosterRows.mockResolvedValue([{ "Staff ID": "S001", "Staff Name": "Andrea Chua", Date: "2026-08-01", "Clock In": "08:00", "Clock Out": "17:00" }]);
+
+    await runRosterSync(payPeriodId);
+
+    expect(client.query).toHaveBeenCalledWith(
+      "DELETE FROM timesheet WHERE pay_period_id = $1 AND is_frozen = false AND resolved_manually = false",
+      [payPeriodId]
+    );
+  });
+
+  test("does not recreate a resolved unmatched entry while adding a new unmatched entry", async () => {
+    configureDatabase({
+      resolvedRows: [{ shift_date: new Date("2026-08-01T00:00:00Z"), source_key: "Resolved Person" }],
+      summaryRows: [{ staff_ext_ref: null, roster_raw_name: "New Person", total_hours: 8, match_status: "unmatched", shift_date: "2026-08-01", updated_at: new Date() }],
+    });
+    fetchRosterRows.mockResolvedValue([
+      { "Staff ID": "S999", "Staff Name": "Resolved Person", Date: "2026-08-01", "Clock In": "09:00", "Clock Out": "17:00" },
+      { "Staff ID": "S998", "Staff Name": "New Person", Date: "2026-08-01", "Clock In": "09:00", "Clock Out": "17:00" },
+    ]);
+
+    await runRosterSync(payPeriodId);
+
+    const unmatchedInserts = client.query.mock.calls.filter(([sql]) => sql.includes("'unmatched'"));
+    expect(unmatchedInserts).toHaveLength(1);
+    expect(unmatchedInserts[0][1]).toEqual([payPeriodId, "New Person", "2026-08-01", 8, "New Person"]);
   });
 
   test("excludes roster rows that fall outside the pay period's date range", async () => {
@@ -149,5 +188,122 @@ describe("runRosterSync", () => {
 
     expect(result).toMatchObject({ success: false, error: "ACTIVE_PAY_PERIOD_NOT_FOUND" });
     expect(fetchRosterRows).not.toHaveBeenCalled();
+  });
+});
+
+describe("resolveException", () => {
+  test("links an unmatched row to an active staff member", async () => {
+    const timesheetRowId = "22222222-2222-2222-2222-222222222222";
+    const staffId = "33333333-3333-3333-3333-333333333333";
+    pool.query
+      .mockResolvedValueOnce({ rows: [{ id: timesheetRowId, match_status: "unmatched", is_frozen: false }] })
+      .mockResolvedValueOnce({ rows: [{ id: staffId }] })
+      .mockResolvedValueOnce({ rows: [] });
+
+    const result = await resolveException(timesheetRowId, { staffId });
+
+    expect(result).toEqual({ success: true, timesheetRowId, resolution: "staff_linked" });
+    expect(pool.query).toHaveBeenLastCalledWith(expect.stringContaining("match_method = 'manual', resolved_manually = true"), [staffId, timesheetRowId]);
+  });
+
+  test("updates clock times for an invalid-time row", async () => {
+    const timesheetRowId = "22222222-2222-2222-2222-222222222222";
+    pool.query
+      .mockResolvedValueOnce({ rows: [{ id: timesheetRowId, match_status: "invalid_time", is_frozen: false }] })
+      .mockResolvedValueOnce({ rows: [] });
+
+    const result = await resolveException(timesheetRowId, { clockIn: "08:30", clockOut: "17:00" });
+
+    expect(result).toEqual({ success: true, timesheetRowId, resolution: "clock_times_updated" });
+    expect(pool.query).toHaveBeenLastCalledWith(expect.stringContaining("total_hours = $3, match_status = 'matched', resolved_manually = true"), ["08:30", "17:00", 8.5, timesheetRowId]);
+  });
+
+  test("permanently ignores an exception row", async () => {
+    const timesheetRowId = "22222222-2222-2222-2222-222222222222";
+    pool.query
+      .mockResolvedValueOnce({ rows: [{ id: timesheetRowId, match_status: "unmatched", is_frozen: false }] })
+      .mockResolvedValueOnce({ rows: [] });
+
+    const result = await resolveException(timesheetRowId, { ignore: true });
+
+    expect(result).toEqual({ success: true, timesheetRowId, resolution: "ignored" });
+    expect(pool.query).toHaveBeenLastCalledWith(expect.stringContaining("match_status = 'ignored', resolved_manually = true"), [timesheetRowId]);
+  });
+
+  test("rejects resolving a frozen timesheet row", async () => {
+    const timesheetRowId = "22222222-2222-2222-2222-222222222222";
+    pool.query.mockResolvedValueOnce({ rows: [{ id: timesheetRowId, match_status: "unmatched", is_frozen: true }] });
+
+    const result = await resolveException(timesheetRowId, { ignore: true });
+
+    expect(result).toMatchObject({ success: false, error: "TIMESHEET_ROW_FROZEN" });
+    expect(pool.query).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("undoException", () => {
+  const timesheetRowId = "22222222-2222-2222-2222-222222222222";
+
+  test("reverts a staff-link resolution", async () => {
+    pool.query
+      .mockResolvedValueOnce({ rows: [{ id: timesheetRowId, match_status: "matched", is_frozen: false, clock_in: null, total_hours: 8 }] })
+      .mockResolvedValueOnce({ rows: [] });
+
+    const result = await undoException(timesheetRowId);
+
+    expect(result).toEqual({ success: true, timesheetRowId, resolution: "staff_link_reverted" });
+    expect(pool.query).toHaveBeenLastCalledWith(expect.stringContaining("staff_id = NULL, roster_raw_name = source_key, match_status = 'unmatched', resolved_manually = false"), [timesheetRowId]);
+  });
+
+  test("reverts a clock-time fix", async () => {
+    pool.query
+      .mockResolvedValueOnce({ rows: [{ id: timesheetRowId, match_status: "matched", is_frozen: false, clock_in: "08:30", total_hours: 8.5 }] })
+      .mockResolvedValueOnce({ rows: [] });
+
+    const result = await undoException(timesheetRowId);
+
+    expect(result).toEqual({ success: true, timesheetRowId, resolution: "clock_times_reverted" });
+    expect(pool.query).toHaveBeenLastCalledWith(expect.stringContaining("clock_in = NULL, clock_out = NULL, total_hours = 0, match_status = 'invalid_time', resolved_manually = false"), [timesheetRowId]);
+  });
+
+  test.each([
+    [0, "invalid_time"],
+    [8, "unmatched"],
+  ])("reverts an ignored %s-hour row to %s", async (totalHours, expectedStatus) => {
+    pool.query
+      .mockResolvedValueOnce({ rows: [{ id: timesheetRowId, match_status: "ignored", is_frozen: false, clock_in: null, total_hours: totalHours }] })
+      .mockResolvedValueOnce({ rows: [] });
+
+    const result = await undoException(timesheetRowId);
+
+    expect(result).toEqual({ success: true, timesheetRowId, resolution: `${expectedStatus}_reverted` });
+    expect(pool.query).toHaveBeenLastCalledWith(expect.stringContaining("SET match_status = $1, resolved_manually = false"), [expectedStatus, timesheetRowId]);
+  });
+
+  test("rejects undoing a frozen row", async () => {
+    pool.query.mockResolvedValueOnce({ rows: [{ id: timesheetRowId, match_status: "ignored", is_frozen: true, clock_in: null, total_hours: 8 }] });
+
+    const result = await undoException(timesheetRowId);
+
+    expect(result).toMatchObject({ success: false, error: "TIMESHEET_ROW_FROZEN" });
+    expect(pool.query).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("resetPeriodResolutions", () => {
+  test("deletes manually resolved rows before running a fresh manual sync", async () => {
+    configureDatabase({
+      staffById: { S001: { id: "staff-1", staffId: "S001", fullName: "Andrea Chua", status: "active" } },
+      summaryRows: [{ staff_ext_ref: "S001", full_name: "Andrea Chua", total_hours: 8, match_status: "matched", match_method: "id", shift_date: "2026-08-01", clock_in: "09:00", clock_out: "17:00", updated_at: new Date() }],
+    });
+    pool.query.mockResolvedValueOnce({ rows: [] });
+    fetchRosterRows.mockResolvedValue([{ "Staff ID": "S001", "Staff Name": "Andrea Chua", Date: "2026-08-01", "Clock In": "09:00", "Clock Out": "17:00" }]);
+
+    const result = await resetPeriodResolutions(payPeriodId);
+
+    expect(pool.query).toHaveBeenNthCalledWith(1, "DELETE FROM timesheet WHERE pay_period_id = $1 AND resolved_manually = true", [payPeriodId]);
+    expect(fetchRosterRows).toHaveBeenCalledTimes(1);
+    expect(auditService.logAction).toHaveBeenCalledWith(expect.objectContaining({ action: "roster_synced", actor: "manual", entityId: payPeriodId }));
+    expect(result).toMatchObject({ success: true, staffSynced: 1, totalHours: 8 });
   });
 });
