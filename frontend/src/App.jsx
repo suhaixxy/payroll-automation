@@ -10,12 +10,14 @@ import NotFoundPage from "./pages/NotFoundPage";
 import PaymentBatchDetailsPage from "./pages/PaymentBatchDetailsPage";
 import PaymentBatchesPage from "./pages/PaymentBatchesPage";
 import PaymentPreviewPage from "./pages/PaymentPreviewPage";
+import PayPeriodsPage from "./pages/PayPeriodsPage";
 import PayrollCalcPage from "./pages/PayrollCalcPage";
 import PayslipDetailsPage from "./pages/PayslipDetailsPage";
 import PayslipsPage from "./pages/PayslipsPage";
 import ProfilePage from "./pages/ProfilePage";
 import ReviewEmployeesPage from "./pages/ReviewEmployeesPage";
 import RosterSyncPage from "./pages/RosterSyncPage";
+import StaffPage from "./pages/StaffPage";
 import TimesheetValidationPage from "./pages/TimesheetValidationPage";
 
 import ProtectedRoute from "./routes/ProtectedRoute";
@@ -58,6 +60,8 @@ export default function App() {
 
               {/* UC-001 */}
               <Route path="/roster" element={<RosterSyncPage />} />
+              <Route path="/staff" element={<StaffPage />} />
+              <Route path="/pay-periods" element={<PayPeriodsPage />} />
 
               {/* UC-002 */}
               <Route

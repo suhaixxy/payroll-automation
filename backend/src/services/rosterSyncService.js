@@ -42,7 +42,27 @@ async function findMatchingStaff(rosterRow) {
 async function runRosterSync(payPeriodId, actor = "manual") {
   if (!payPeriodId) {
     const activePeriod = await payPeriodService.getActivePayPeriod();
+    if (!activePeriod) {
+      return {
+        success: false,
+        error: "ACTIVE_PAY_PERIOD_NOT_FOUND",
+        message: "No active pay period is available",
+      };
+    }
     payPeriodId = activePeriod.id;
+  }
+
+  // The use case says the sync reads roster rows "for the active pay
+  // period" — we need the period's date range to actually enforce that,
+  // otherwise syncing any period would pull every row in the sheet
+  // regardless of date.
+  const payPeriod = await payPeriodService.getPayPeriod(payPeriodId);
+  if (!payPeriod) {
+    return {
+      success: false,
+      error: "PAY_PERIOD_NOT_FOUND",
+      message: "The selected pay period does not exist",
+    };
   }
 
   const previousDraft = await getLastSyncResult(payPeriodId);
@@ -87,8 +107,17 @@ async function runRosterSync(payPeriodId, actor = "manual") {
   const matchedShifts = [];
   const unmatchedRows = [];
   const invalidTimeRows = [];
+  const outOfPeriodRows = [];
 
   for (const row of rosterRows) {
+    // Skip rows outside the target period's date range so syncing one
+    // period never pulls in another period's shifts. Dates are plain
+    // YYYY-MM-DD strings, so a direct string comparison sorts correctly.
+    if (row["Date"] < payPeriod.startDate || row["Date"] > payPeriod.endDate) {
+      outOfPeriodRows.push({ rosterRawName: row["Staff Name"], date: row["Date"] });
+      continue;
+    }
+
     const matchResult = await findMatchingStaff(row);
     const hoursForRow = calculateHours(row["Clock In"], row["Clock Out"]);
 
@@ -173,6 +202,7 @@ async function runRosterSync(payPeriodId, actor = "manual") {
       totalHours: result.totalHours,
       unmatchedCount: result.unmatchedCount,
       invalidTimeCount: result.invalidTimeCount,
+      outOfPeriodCount: outOfPeriodRows.length,
     },
   });
   return result;

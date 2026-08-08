@@ -1,9 +1,13 @@
 import {
   AccountCircleRounded,
+  BadgeRounded,
+  CalculateRounded,
   DashboardRounded,
   DescriptionRounded,
   ExpandLessRounded,
   ExpandMoreRounded,
+  FactCheckRounded,
+  FolderSharedRounded,
   GroupsRounded,
   LogoutRounded,
   MenuRounded,
@@ -11,7 +15,9 @@ import {
   PersonRounded,
   PlaylistAddCheckRounded,
   ReceiptLongRounded,
+  SyncAltRounded,
   TodayRounded,
+  TimerRounded,
 } from "@mui/icons-material";
 import {
   AppBar,
@@ -42,6 +48,12 @@ const paymentLinks = [
   { label: "Payment Preview", path: "/payments/preview", icon: <PlaylistAddCheckRounded /> },
   { label: "Payment Batches", path: "/payments", icon: <ReceiptLongRounded /> },
   { label: "Payslips", path: "/payslips", icon: <DescriptionRounded /> },
+];
+
+const rosterStaffLinks = [
+  { label: "Roster Sync", path: "/roster", icon: <SyncAltRounded /> },
+  { label: "Staff", path: "/staff", icon: <BadgeRounded /> },
+  { label: "Pay Periods", path: "/pay-periods", icon: <TodayRounded /> },
 ];
 
 const pageTitles = [
@@ -79,11 +91,17 @@ function Sidebar({ onNavigate }) {
   const isPaymentRoute =
     paymentLinks.some(({ path }) => location.pathname === path) ||
     /^\/payments\/[^/]+$/.test(location.pathname);
+  const isRosterStaffRoute = rosterStaffLinks.some(({ path }) => location.pathname === path);
   const [paymentsOpen, setPaymentsOpen] = useState(isPaymentRoute);
+  const [rosterStaffOpen, setRosterStaffOpen] = useState(isRosterStaffRoute);
 
   useEffect(() => {
     if (isPaymentRoute) setPaymentsOpen(true);
   }, [isPaymentRoute]);
+
+  useEffect(() => {
+    if (isRosterStaffRoute) setRosterStaffOpen(true);
+  }, [isRosterStaffRoute]);
 
   const logout = async () => {
     await signOut();
@@ -102,13 +120,30 @@ function Sidebar({ onNavigate }) {
         {isManager && (
           <>
             <SidebarLink icon={<DashboardRounded />} label="Dashboard" path="/dashboard" active={location.pathname === "/dashboard"} onNavigate={onNavigate} />
+            <ListItemButton
+              className={`sidebar-link sidebar-parent-link${isRosterStaffRoute ? " sidebar-parent-active" : ""}`}
+              onClick={() => setRosterStaffOpen((open) => !open)}
+              aria-expanded={rosterStaffOpen}
+              aria-controls="roster-staff-navigation"
+            >
+              <ListItemIcon><FolderSharedRounded /></ListItemIcon>
+              <ListItemText primary="Roster & Staff" />
+              {rosterStaffOpen ? <ExpandLessRounded fontSize="small" /> : <ExpandMoreRounded fontSize="small" />}
+            </ListItemButton>
+            <Collapse in={rosterStaffOpen} timeout={180} unmountOnExit>
+              <List id="roster-staff-navigation" component="div" disablePadding className="sidebar-submenu">
+                {rosterStaffLinks.map((link) => {
+                  const active = location.pathname === link.path;
+                  return <SidebarLink key={link.path} {...link} active={active} onNavigate={onNavigate} nested />;
+                })}
+              </List>
+            </Collapse>
+            <SidebarLink icon={<TimerRounded />} label="Timesheet Validation" path="/timesheets" active={location.pathname === "/timesheets"} onNavigate={onNavigate} />
+            <SidebarLink icon={<CalculateRounded />} label="Payroll Calc" path="/payroll" active={location.pathname === "/payroll"} onNavigate={onNavigate} />
+            <SidebarLink icon={<FactCheckRounded />} label="Approvals" path="/approvals" active={location.pathname === "/approvals"} onNavigate={onNavigate} />
             <ListItemButton className="sidebar-link sidebar-link-unavailable" disabled>
               <ListItemIcon><GroupsRounded /></ListItemIcon>
               <ListItemText primary="Employees" secondary="Not available" />
-            </ListItemButton>
-            <ListItemButton className="sidebar-link sidebar-link-unavailable" disabled>
-              <ListItemIcon><TodayRounded /></ListItemIcon>
-              <ListItemText primary="Pay Periods" secondary="Not available" />
             </ListItemButton>
             <ListItemButton
               className={`sidebar-link sidebar-parent-link${isPaymentRoute ? " sidebar-parent-active" : ""}`}

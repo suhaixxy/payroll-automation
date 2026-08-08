@@ -14,6 +14,16 @@ function RosterSyncPage() {
   const [errorMessage, setErrorMessage] = useState("");
   const [preservedDraft, setPreservedDraft] = useState(false);
   const [expandedStaffId, setExpandedStaffId] = useState(null);
+  const today = new Date();
+  const windowStart = new Date(today);
+  const windowEnd = new Date(today);
+  windowStart.setMonth(windowStart.getMonth() - 3);
+  windowEnd.setMonth(windowEnd.getMonth() + 3);
+  const visiblePayPeriods = payPeriods.filter((period) => {
+    const startDate = new Date(`${period.startDate}T00:00:00`);
+    const endDate = new Date(`${period.endDate}T23:59:59`);
+    return endDate >= windowStart && startDate <= windowEnd;
+  });
 
   async function refresh(payPeriodId) {
     const [nextSummary, nextHistory] = await Promise.all([fetchSyncSummary(payPeriodId), fetchSyncHistory(payPeriodId)]);
@@ -67,7 +77,7 @@ function RosterSyncPage() {
       <section className="roster-controls">
         <label htmlFor="pay-period">Pay period</label>
         <select id="pay-period" value={selectedPayPeriodId} onChange={(event) => { setSelectedPayPeriodId(event.target.value); setExpandedStaffId(null); refresh(event.target.value).catch((error) => setErrorMessage(error.message)); }} disabled={loading}>
-          {payPeriods.map((period) => <option key={period.id} value={period.id}>{period.startDate} to {period.endDate}{period.isActive ? " (active)" : ""}</option>)}
+          {visiblePayPeriods.map((period) => <option key={period.id} value={period.id}>{period.startDate} to {period.endDate}{period.isActive ? " (active)" : ""}</option>)}
         </select>
         <button className="roster-primary" onClick={() => runImport(triggerImportNow)} disabled={loading || !selectedPayPeriodId}>{loading ? "Syncing..." : "Import Now"}</button>
         <button className="roster-secondary" onClick={() => runImport(simulateSheetDown)} disabled={loading || !selectedPayPeriodId}>Simulate Sheet Down</button>

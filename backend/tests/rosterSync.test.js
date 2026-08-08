@@ -2,11 +2,12 @@ jest.mock("../src/config/database", () => ({
   pool: { query: jest.fn(), connect: jest.fn() },
 }));
 jest.mock("../src/adapters/googleSheetsAdapter", () => ({ fetchRosterRows: jest.fn() }));
-jest.mock("../src/services/payPeriodService", () => ({ getActivePayPeriod: jest.fn() }));
+jest.mock("../src/services/payPeriodService", () => ({ getActivePayPeriod: jest.fn(), getPayPeriod: jest.fn() }));
 jest.mock("../src/services/auditService", () => ({ logAction: jest.fn() }));
 
 const { pool } = require("../src/config/database");
 const { fetchRosterRows } = require("../src/adapters/googleSheetsAdapter");
+const payPeriodService = require("../src/services/payPeriodService");
 const auditService = require("../src/services/auditService");
 const { calculateHours } = require("../src/utils/hoursCalculator");
 const { runRosterSync } = require("../src/services/rosterSyncService");
@@ -29,6 +30,14 @@ beforeEach(() => {
   jest.clearAllMocks();
   client.query.mockResolvedValue({ rows: [] });
   configureDatabase();
+  // Default: a period that covers every existing test's sample dates
+  // (2026-08-01 onward), so old tests keep passing unless a test
+  // explicitly overrides this.
+  payPeriodService.getPayPeriod.mockResolvedValue({
+    id: payPeriodId,
+    startDate: "2026-08-01",
+    endDate: "2026-08-14",
+  });
 });
 
 describe("calculateHours", () => {
@@ -106,5 +115,39 @@ describe("runRosterSync", () => {
     expect(client.query).toHaveBeenCalledWith("COMMIT");
     expect(auditService.logAction).toHaveBeenCalledWith(expect.objectContaining({ action: "roster_synced", actor: "scheduler", entityId: payPeriodId }));
     expect(result).toMatchObject({ success: true, staffSynced: 1, totalHours: 9 });
+  });
+
+  test("excludes roster rows that fall outside the pay period's date range", async () => {
+    configureDatabase({
+      staffById: { S001: { id: "staff-1", staffId: "S001", fullName: "Andrea Chua", status: "active" } },
+    });
+    fetchRosterRows.mockResolvedValue([
+      { "Staff ID": "S001", "Staff Name": "Andrea Chua", Date: "2026-07-15", "Clock In": "08:00", "Clock Out": "17:00" }, // before period
+      { "Staff ID": "S001", "Staff Name": "Andrea Chua", Date: "2026-08-20", "Clock In": "08:00", "Clock Out": "17:00" }, // after period
+    ]);
+
+    const result = await runRosterSync(payPeriodId);
+
+    const insertCalls = client.query.mock.calls.filter(([sql]) => sql.includes("INSERT INTO timesheet"));
+    expect(insertCalls).toHaveLength(0);
+    expect(result.success).toBe(false);
+  });
+
+  test("returns PAY_PERIOD_NOT_FOUND when the pay period does not exist", async () => {
+    payPeriodService.getPayPeriod.mockResolvedValue(null);
+
+    const result = await runRosterSync(payPeriodId);
+
+    expect(result).toMatchObject({ success: false, error: "PAY_PERIOD_NOT_FOUND" });
+    expect(fetchRosterRows).not.toHaveBeenCalled();
+  });
+
+  test("returns ACTIVE_PAY_PERIOD_NOT_FOUND when no active pay period exists", async () => {
+    payPeriodService.getActivePayPeriod.mockResolvedValue(null);
+
+    const result = await runRosterSync();
+
+    expect(result).toMatchObject({ success: false, error: "ACTIVE_PAY_PERIOD_NOT_FOUND" });
+    expect(fetchRosterRows).not.toHaveBeenCalled();
   });
 });
