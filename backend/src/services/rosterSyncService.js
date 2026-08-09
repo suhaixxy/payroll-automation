@@ -138,6 +138,8 @@ async function runRosterSync(payPeriodId, actor = "manual") {
         rosterRawName: `${label} (missing clock-in/out)`,
         sourceKey: row["Staff Name"],
         date: row["Date"],
+        clockIn: row["Clock In"] || null,
+        clockOut: row["Clock Out"] || null,
       });
       continue;
     }
@@ -190,9 +192,9 @@ async function runRosterSync(payPeriodId, actor = "manual") {
 
     for (const entry of invalidTimeRows) {
       await client.query(
-        `INSERT INTO timesheet (pay_period_id, staff_id, roster_raw_name, shift_date, total_hours, match_status, source_key)
-         VALUES ($1, $2, $3, $4, 0, 'invalid_time', $5)`,
-        [payPeriodId, entry.staffDbId, entry.rosterRawName, entry.date, entry.sourceKey]
+        `INSERT INTO timesheet (pay_period_id, staff_id, roster_raw_name, shift_date, total_hours, match_status, source_key, clock_in, clock_out)
+         VALUES ($1, $2, $3, $4, 0, 'invalid_time', $5, $6, $7)`,
+        [payPeriodId, entry.staffDbId, entry.rosterRawName, entry.date, entry.sourceKey, entry.clockIn, entry.clockOut]
       );
     }
 
@@ -291,6 +293,8 @@ async function getLastSyncResult(payPeriodId) {
       id: row.id,
       rosterRawName: row.roster_raw_name || row.full_name,
       date: row.shift_date,
+      clockIn: row.clock_in,
+      clockOut: row.clock_out,
     }));
 
   const totalHours = Math.round(draftTimesheets.reduce((sum, t) => sum + t.totalHours, 0) * 100) / 100;

@@ -33,7 +33,7 @@ function ExceptionList({ items, variant = "unmatched", activeStaff = [], onResol
   return (
     <ul className="roster-exception-list">
       {items.map((entry, index) => {
-        const times = timeValues[entry.id] || { clockIn: "", clockOut: "" };
+        const times = timeValues[entry.id] || { clockIn: entry.clockIn || "", clockOut: entry.clockOut || "" };
         const isResolving = resolvingId === entry.id;
         return (
           <li key={entry.id || `${entry.rosterRawName}-${entry.date}-${index}`} className={invalidTime ? "roster-critical" : "roster-unmatched"}>
