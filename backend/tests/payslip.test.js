@@ -2,15 +2,18 @@ const request = require("supertest");
 const app = require("../src/app");
 const {
     sequelize, PayPeriod, PayrollLine, Approval, PaymentBatch,
-    PaymentBatchItem, Payslip, AuditLog,
+    PaymentBatchItem, Payslip, AuditLog, User,
 } = require("../src/models");
 
 const EMPLOYEE_STAFF_ID = "11111111-1111-1111-1111-111111111111";
 const ids = {
     period: "93000000-0000-4000-8000-000000000001",
+    run: "93000000-0000-4000-8000-000000000004",
     line: "93000000-0000-4000-8000-000000000002",
     approval: "93000000-0000-4000-8000-000000000003",
 };
+const RATE_SET_ID = "c3000000-0000-4000-8000-000000000001";
+const MANAGER_ID = "81000000-0000-0000-0000-000000000002";
 let managerToken;
 let employeeToken;
 let batchId;
@@ -25,7 +28,8 @@ beforeAll(async () => {
     if (oldBatchIds.length) await PaymentBatchItem.destroy({ where: { payment_batch_id: oldBatchIds }, force: true });
     await PaymentBatch.destroy({ where: { pay_period_id: ids.period }, force: true });
     await Approval.destroy({ where: { pay_period_id: ids.period }, force: true });
-    await PayrollLine.destroy({ where: { pay_period_id: ids.period }, force: true });
+    await PayrollLine.destroy({ where: { period_id: ids.period }, force: true });
+    await sequelize.query("DELETE FROM calculation_runs WHERE id = :runId", { replacements: { runId: ids.run } });
     await PayPeriod.destroy({ where: { id: ids.period }, force: true });
 
     await PayPeriod.create({
@@ -33,12 +37,22 @@ beforeAll(async () => {
         status: "approved", is_locked: true, locked_at: new Date(),
         total_gross: 1500, total_net: 1325,
     });
-    await PayrollLine.create({
-        id: ids.line, pay_period_id: ids.period, staff_id: EMPLOYEE_STAFF_ID,
-        gross_pay: 1500, incentive_pay: 75, cpf_amount: 200,
-        sdl_amount: 10, net_pay: 1325, status: "ok",
+    await sequelize.query(`INSERT INTO calculation_runs
+        (id, period_id, run_number, rate_set_id, status, total_gross,
+         total_net_payable, lines_complete, lines_incomplete, run_by)
+        VALUES (:id, :periodId, 1, :rateSetId, 'complete', 1575,
+                1325, 1, 0, :runBy)`, {
+        replacements: { id: ids.run, periodId: ids.period, rateSetId: RATE_SET_ID, runBy: MANAGER_ID },
     });
-    await Approval.create({ id: ids.approval, pay_period_id: ids.period, decision: "approved", approved_by: "Payslip Test Manager" });
+    await PayrollLine.create({
+        id: ids.line, run_id: ids.run, period_id: ids.period, staff_id: EMPLOYEE_STAFF_ID,
+        gross_total: 1575, incentive_amount: 75, cpf_employee: 200,
+        sdl: 10, net_pay: 1325, line_status: "complete",
+    });
+    await Approval.create({
+        id: ids.approval, pay_period_id: ids.period, calculation_run_id: ids.run,
+        decision: "approved", approved_by: "Payslip Test Manager",
+    });
 
     const managerLogin = await request(app).post("/api/auth/login").send({ email: "manager@payroll.local", password: "Manager123!" });
     const employeeLogin = await request(app).post("/api/auth/login").send({ email: "employee@payroll.local", password: "Employee123!" });
@@ -55,7 +69,8 @@ afterAll(async () => {
     await PaymentBatchItem.destroy({ where: { payment_batch_id: batchId }, force: true });
     await PaymentBatch.destroy({ where: { id: batchId }, force: true });
     await Approval.destroy({ where: { pay_period_id: ids.period }, force: true });
-    await PayrollLine.destroy({ where: { pay_period_id: ids.period }, force: true });
+    await PayrollLine.destroy({ where: { period_id: ids.period }, force: true });
+    await sequelize.query("DELETE FROM calculation_runs WHERE id = :runId", { replacements: { runId: ids.run } });
     await PayPeriod.destroy({ where: { id: ids.period }, force: true });
     await sequelize.close();
 });
@@ -76,7 +91,15 @@ describe("Automatic payslip generation", () => {
         const response = await request(app).get(`/api/payments/${batchId}/payslips`).set(bearer(managerToken));
         expect(response.status).toBe(200);
         expect(response.body.rows).toHaveLength(1);
-        expect(response.body.rows[0].employeeReference).toBe("EMP001");
+        expect(response.body.rows[0].employeeReference).toBe("S001");
+    });
+
+    test("nonexistent Payment Batch payslip list returns PAYMENT_BATCH_NOT_FOUND", async () => {
+        const response = await request(app)
+            .get("/api/payments/00000000-0000-4000-8000-000000009999/payslips")
+            .set(bearer(managerToken));
+        expect(response.status).toBe(404);
+        expect(response.body.error.code).toBe("PAYMENT_BATCH_NOT_FOUND");
     });
 
     test("manager can list backend-driven payslips with status and payment metadata", async () => {
@@ -84,7 +107,7 @@ describe("Automatic payslip generation", () => {
         expect(response.status).toBe(200);
         const payslip = response.body.rows.find((row) => row.id === payslipId);
         expect(payslip).toMatchObject({
-            employeeReference: "EMP001",
+            employeeReference: "S001",
             status: "completed",
             paymentMethod: "GIRO",
             currency: "SGD",
@@ -118,10 +141,43 @@ describe("Payslip ownership and protected PDF", () => {
         expect(response.body.rows.every((payslip) => payslip.staffId === EMPLOYEE_STAFF_ID)).toBe(true);
     });
 
+    test("employee account without linked staff cannot list own payslips", async () => {
+        const source = await User.findOne({ where: { email: "employee@payroll.local" } });
+        const unlinked = await User.create({
+            id: "81000000-0000-4000-8000-000000009999",
+            full_name: "Unlinked Test Employee",
+            email: "unlinked-employee-test@payroll.local",
+            password_hash: source.password_hash,
+            role: "employee",
+            staff_id: null,
+            status: "active",
+        });
+        try {
+            const login = await request(app).post("/api/auth/login").send({
+                email: unlinked.email,
+                password: "Employee123!",
+            });
+            const response = await request(app).get("/api/payslips/me").set(bearer(login.body.accessToken));
+            expect(response.status).toBe(403);
+            expect(response.body.error.code).toBe("PAYSLIP_ACCESS_DENIED");
+        } finally {
+            await AuditLog.destroy({ where: { user_id: unlinked.id }, force: true });
+            await unlinked.destroy({ force: true });
+        }
+    });
+
+    test("nonexistent payslip returns PAYSLIP_NOT_FOUND", async () => {
+        const response = await request(app)
+            .get("/api/payslips/00000000-0000-4000-8000-000000009999")
+            .set(bearer(managerToken));
+        expect(response.status).toBe(404);
+        expect(response.body.error.code).toBe("PAYSLIP_NOT_FOUND");
+    });
+
     test("employee cannot view another employee's payslip", async () => {
         const other = await Payslip.create({
             payment_batch_id: batchId,
-            payroll_line_id: "55555555-5555-5555-5555-555555555555",
+            payroll_line_id: ids.line,
             staff_id: "22222222-2222-2222-2222-222222222222",
             payslip_reference: `PS-OTHER-${Date.now()}`,
             company_name: "Payroll Automation Demo", employee_reference: "EMP002", employee_name: "Nurul Aisyah",
@@ -131,7 +187,7 @@ describe("Payslip ownership and protected PDF", () => {
         });
         const response = await request(app).get(`/api/payslips/${other.id}`).set(bearer(employeeToken));
         expect(response.status).toBe(403);
-        expect(response.body.error).toBe("PAYSLIP_ACCESS_DENIED");
+        expect(response.body.error.code).toBe("PAYSLIP_ACCESS_DENIED");
         await other.destroy({ force: true });
     });
 

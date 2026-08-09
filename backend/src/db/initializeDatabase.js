@@ -15,8 +15,8 @@ const MIGRATIONS_DIR = path.resolve(__dirname, 'migrations');
 // executing them. A brand-new/empty database still runs them for real.
 const PRE_RUNNER_BASELINE = [
   '001_initial_schema.sql',
-  '002_uc001_enhancements.sql',
-  '003_shift_times.sql',
+  '002_uc001_timesheet_details.sql',
+  '003_pay_period_unique_start_date.sql',
 ];
 
 async function initializeDatabase() {

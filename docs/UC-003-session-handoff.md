@@ -218,7 +218,7 @@ tests/payrollCalc.test.js                Run lifecycle + CSV + variance
 tests/adjustments.test.js
 tests/performanceInputs.test.js
 tests/rateSets.test.js
-src/services/__tests__/calculationEngine.test.js
+tests/calculationEngine.test.js
 ```
 
 ### Backend — modified

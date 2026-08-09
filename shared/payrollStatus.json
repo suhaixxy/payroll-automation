@@ -1,5 +1,7 @@
 {
   "_doc": [
+    "Payment generation and HRMS synchronization are payment_batch states.",
+    "A period remains approved until successful payment, then becomes paid.",
     "Shared pay-period status contract (UC-003 guide §5.1) — the ONE place",
     "the status strings live. Backend: require('../../shared/payrollStatus.json');",
     "frontend: import payrollStatus from '../../shared/payrollStatus.json'.",

@@ -12,6 +12,21 @@ const schema = yup.object({
   password: yup.string().min(8, "Password must contain at least 8 characters").required("Password is required"),
 });
 
+const loginErrorMessage = (error) => {
+  if (error.response) {
+    const payload = error.response.data;
+    const code = payload?.error?.code || payload?.error;
+
+    if (code === "INVALID_CREDENTIALS") return "Invalid email or password.";
+
+    return payload?.error?.message || payload?.message || "Unable to sign in. Please try again.";
+  }
+
+  if (error.request) return "Cannot reach the payroll server. Please try again.";
+
+  return "Unable to sign in. Please try again.";
+};
+
 export default function LoginPage() {
   const { user, loading, signIn } = useAuth();
   const navigate = useNavigate();
@@ -32,7 +47,7 @@ export default function LoginPage() {
       const requestedPath = location.state?.from?.pathname;
       navigate(signedInUser.role === "employee" ? "/payslips" : (requestedPath || "/dashboard"), { replace: true });
     } catch (error) {
-      setServerError(error.response?.data?.message || (error.request ? "Cannot reach the payroll server. Please try again." : "Unable to sign in."));
+      setServerError(loginErrorMessage(error));
     }
   };
 

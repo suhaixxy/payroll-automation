@@ -9,6 +9,7 @@ module.exports = (sequelize, DataTypes) => {
             type: DataTypes.UUID,
             allowNull: false
         },
+        calculation_run_id: { type: DataTypes.UUID, allowNull: true },
         batch_reference: { type: DataTypes.STRING(50), allowNull: false, unique: true },
         file_format: {
             type: DataTypes.ENUM(

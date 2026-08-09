@@ -4,7 +4,7 @@
 // the RBAC (401/403) and state-guard (404/409/422) paths. Throwaway data
 // (own staff/periods/rate set) created in beforeAll, deleted in afterAll.
 // Per-rule calculation maths is pinned in
-// src/services/__tests__/calculationEngine.test.js.
+// tests/calculationEngine.test.js.
 //
 // Test data lives in 2030 with its own rate set (newest effective_from wins
 // for those dates), so seeded 2026 data can never interfere.
@@ -15,7 +15,8 @@ const request = require('supertest');
 const app = require('../src/app');
 const { pool } = require('../src/config/database');
 const { initializeDatabase } = require('../src/db/initializeDatabase');
-const { sequelize, syncUc003Tables, PayRate, User } = require('../src/models');
+const { sequelize, PayRate } = require('../src/models');
+const { createAndLogin, deleteTestUsers } = require('./helpers/authFixtures');
 
 const ACCOUNTING_EMAIL = 'uc003-accounting@test.local';
 const MANAGER_EMAIL = 'uc003-manager@test.local';
@@ -29,9 +30,7 @@ let emptyRateSetPeriodId; // a 2020 period no rate set covers
 const staffIds = {};
 
 async function registerAndLogin(name, email, role) {
-  await request(app).post('/api/user/register').send({ name, email, password: PASSWORD, role });
-  const login = await request(app).post('/api/user/login').send({ email, password: PASSWORD });
-  return login.body.accessToken;
+  return createAndLogin(app, { name, email, password: PASSWORD, role });
 }
 
 async function createStaff(externalRef, fullName, employmentType, cpfEligible, dateOfBirth) {
@@ -69,23 +68,17 @@ async function cleanup() {
   }
   await pool.query(`DELETE FROM cpf_rate_bands WHERE rate_set_id = $1`, [TEST_RATE_SET_ID]);
   await pool.query(`DELETE FROM statutory_rate_sets WHERE id = $1`, [TEST_RATE_SET_ID]);
-  // Test users can't be removed while audit rows reference them.
-  await pool.query(
-    `DELETE FROM uc003_audit_log WHERE actor_id IN (SELECT id FROM users WHERE email = ANY($1))`,
-    [[ACCOUNTING_EMAIL, MANAGER_EMAIL]]
-  );
-  await User.destroy({ where: { email: [ACCOUNTING_EMAIL, MANAGER_EMAIL] } });
+  await deleteTestUsers(pool, [ACCOUNTING_EMAIL, MANAGER_EMAIL]);
 }
 
 beforeAll(async () => {
   await initializeDatabase();
-  await syncUc003Tables();
   await cleanup(); // a previous run may have died before its afterAll
 
-  accountingToken = await registerAndLogin('Calc Accounting', ACCOUNTING_EMAIL, 'accounting');
+  accountingToken = await registerAndLogin('Calc Employee', ACCOUNTING_EMAIL, 'employee');
   managerToken = await registerAndLogin('Calc Manager', MANAGER_EMAIL, 'manager');
 
-  const { rows: userRows } = await pool.query(`SELECT id FROM users WHERE email = $1`, [MANAGER_EMAIL]);
+  const { rows: userRows } = await pool.query(`SELECT id FROM user_account WHERE email = $1`, [MANAGER_EMAIL]);
   await pool.query(
     `INSERT INTO statutory_rate_sets
        (id, version_label, effective_from, effective_to, sdl_rate, sdl_min, sdl_max,
@@ -170,7 +163,7 @@ describe('guards: auth, roles, state (§2.2, §3.5)', () => {
   });
 
   test('404 for an unknown period', async () => {
-    const response = await asAccounting(
+    const response = await asManager(
       request(app).post('/api/uc003/periods/00000000-0000-4000-8000-000000009999/calculate')
     );
     expect(response.status).toBe(404);
@@ -178,7 +171,7 @@ describe('guards: auth, roles, state (§2.2, §3.5)', () => {
   });
 
   test('422 when no statutory rate set covers the period', async () => {
-    const response = await asAccounting(
+    const response = await asManager(
       request(app).post(`/api/uc003/periods/${emptyRateSetPeriodId}/calculate`)
     );
     expect(response.status).toBe(422);
@@ -188,7 +181,7 @@ describe('guards: auth, roles, state (§2.2, §3.5)', () => {
 
 describe('run lifecycle (§3.1, §3.2, §5.9)', () => {
   test('calculate creates run #1 pinned to the rate set; period -> calculated', async () => {
-    const response = await asAccounting(request(app).post(`/api/uc003/periods/${periodId}/calculate`));
+    const response = await asManager(request(app).post(`/api/uc003/periods/${periodId}/calculate`));
 
     expect(response.status).toBe(201);
     const data = response.body.data;
@@ -197,10 +190,10 @@ describe('run lifecycle (§3.1, §3.2, §5.9)', () => {
     expect(data.status).toBe('calculated');
 
     // Complete: PT-A (904.50 gross / 180.00 CPF) + FT-B (360.00, exempt).
-    // Incomplete (excluded): PT-C no rate, plus the 3 seeded staff with no
+    // Incomplete (excluded): PT-C no rate, plus the 5 seeded staff with no
     // data in this test window.
     expect(data.linesComplete).toBe(2);
-    expect(data.linesIncomplete).toBe(4);
+    expect(data.linesIncomplete).toBe(6);
     expect(data.totals.gross).toBe('1264.50');
     expect(data.totals.employeeDeductions).toBe('180.00'); // CPF employee ONLY
     expect(data.totals.employerCost).toBe('159.26'); // 155.00 + 2.26 + 2.00
@@ -208,13 +201,13 @@ describe('run lifecycle (§3.1, §3.2, §5.9)', () => {
   });
 
   test('409 calculating a period that is no longer validated', async () => {
-    const response = await asAccounting(request(app).post(`/api/uc003/periods/${periodId}/calculate`));
+    const response = await asManager(request(app).post(`/api/uc003/periods/${periodId}/calculate`));
     expect(response.status).toBe(409);
     expect(response.body.error.code).toBe('PERIOD_NOT_VALIDATED');
   });
 
   test('recalculate creates run #2 and PRESERVES run #1 (§5.9)', async () => {
-    const response = await asAccounting(
+    const response = await asManager(
       request(app).post(`/api/uc003/periods/${periodId}/recalculate`)
     );
     expect(response.status).toBe(201);
@@ -231,12 +224,12 @@ describe('run lifecycle (§3.1, §3.2, §5.9)', () => {
     const all = await asAccounting(request(app).get(`/api/uc003/periods/${periodId}/lines?limit=50`));
     expect(all.status).toBe(200);
     expect(all.body.data.run.runNumber).toBe(2);
-    expect(all.body.meta.total).toBe(6);
+    expect(all.body.meta.total).toBe(8);
 
     const incompleteOnly = await asAccounting(
       request(app).get(`/api/uc003/periods/${periodId}/lines?status=incomplete`)
     );
-    expect(incompleteOnly.body.meta.total).toBe(4);
+    expect(incompleteOnly.body.meta.total).toBe(6);
     expect(
       incompleteOnly.body.data.lines.every((line) => line.lineStatus === 'incomplete')
     ).toBe(true);
@@ -292,7 +285,7 @@ describe('register export and per-staff variance (§7.2, §7.9)', () => {
     const anonymous = await request(app).get(`/api/uc003/periods/${periodId}/export.csv`);
     expect(anonymous.status).toBe(401);
 
-    const response = await asAccounting(
+    const response = await asManager(
       request(app).get(`/api/uc003/periods/${periodId}/export.csv`)
     );
     expect(response.status).toBe(200);
@@ -305,7 +298,7 @@ describe('register export and per-staff variance (§7.2, §7.9)', () => {
         'hourly_rate_used,gross_from_hours,incentive_amount,adjustments_total,gross_total,' +
         'cpf_employee,cpf_employer,sdl_employer,net_payable,line_status,incomplete_reasons'
     );
-    expect(csvLines).toHaveLength(1 + 6); // header + one row per staff line
+    expect(csvLines).toHaveLength(1 + 8); // header + one row per active staff line
     const ptaRow = csvLines.find((row) => row.startsWith('T-PTA,'));
     expect(ptaRow).toContain('904.50'); // gross from hours
     expect(ptaRow).toContain('724.50'); // net payable
@@ -320,7 +313,7 @@ describe('register export and per-staff variance (§7.2, §7.9)', () => {
     expect(response.status).toBe(200);
     const data = response.body.data;
     expect(data.currentRun.runNumber).toBe(1); // run 2 was voided above
-    expect(data.rows).toHaveLength(6);
+    expect(data.rows).toHaveLength(8);
 
     const pta = data.rows.find((row) => row.externalRef === 'T-PTA');
     expect(pta.currentNet).toBe('724.50');
@@ -358,7 +351,7 @@ describe('submit to approval (§5.1, §6)', () => {
   });
 
   test('recalculating a pending_approval period is allowed and moves it back', async () => {
-    const response = await asAccounting(
+    const response = await asManager(
       request(app).post(`/api/uc003/periods/${periodId}/recalculate`)
     );
     expect(response.status).toBe(201);
@@ -370,7 +363,7 @@ describe('submit to approval (§5.1, §6)', () => {
     // UC-004 owns the approved transition — simulated directly in SQL.
     await pool.query(`UPDATE pay_period SET status = 'approved' WHERE id = $1`, [periodId]);
 
-    const recalc = await asAccounting(
+    const recalc = await asManager(
       request(app).post(`/api/uc003/periods/${periodId}/recalculate`)
     );
     expect(recalc.status).toBe(409);

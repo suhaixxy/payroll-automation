@@ -58,11 +58,11 @@ async function loadAuthoritativeRun(periodId) {
             r.lines_complete AS "linesComplete",
             r.lines_incomplete AS "linesIncomplete",
             to_char(r.run_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') AS "runAt",
-            u.name AS "runByName",
+            COALESCE(u.full_name, 'Legacy user') AS "runByName",
             s.version_label AS "rateSetVersion",
             r.rate_set_id AS "rateSetId"
      FROM calculation_runs r
-     JOIN users u ON u.id = r.run_by
+     LEFT JOIN user_account u ON u.id = r.run_by
      JOIN statutory_rate_sets s ON s.id = r.rate_set_id
      WHERE r.period_id = :periodId AND r.status = 'complete'
      ORDER BY r.run_number DESC
@@ -569,11 +569,11 @@ async function getLine(lineId) {
             s.employment_type AS "employmentType", s.cpf_eligible AS "cpfEligible",
             r.run_number AS "runNumber", r.status AS "runStatus",
             to_char(r.run_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') AS "runAt",
-            u.name AS "runByName", rs.version_label AS "rateSetVersion"
+            COALESCE(u.full_name, 'Legacy user') AS "runByName", rs.version_label AS "rateSetVersion"
      FROM payroll_lines pl
      JOIN staff s ON s.id = pl.staff_id
      JOIN calculation_runs r ON r.id = pl.run_id
-     JOIN users u ON u.id = r.run_by
+     LEFT JOIN user_account u ON u.id = r.run_by
      JOIN statutory_rate_sets rs ON rs.id = r.rate_set_id
      WHERE pl.id = :lineId`,
     { replacements: { lineId }, type: QueryTypes.SELECT }
@@ -728,9 +728,9 @@ async function getRuns(periodId) {
             r.lines_complete AS "linesComplete", r.lines_incomplete AS "linesIncomplete",
             r.void_reason AS "voidReason",
             to_char(r.run_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') AS "runAt",
-            u.name AS "runByName", s.version_label AS "rateSetVersion"
+            COALESCE(u.full_name, 'Legacy user') AS "runByName", s.version_label AS "rateSetVersion"
      FROM calculation_runs r
-     JOIN users u ON u.id = r.run_by
+     LEFT JOIN user_account u ON u.id = r.run_by
      JOIN statutory_rate_sets s ON s.id = r.rate_set_id
      WHERE r.period_id = :periodId
      ORDER BY r.run_number DESC`,

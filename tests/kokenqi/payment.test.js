@@ -13,6 +13,7 @@ let counter = 100;
 const testPeriodIds = [];
 const testStaffIds = [];
 const testBatchIds = [];
+const RATE_SET_ID = "c3000000-0000-4000-8000-000000000001";
 
 const nextUuid = () => {
     counter += 1;
@@ -21,16 +22,40 @@ const nextUuid = () => {
 
 const auth = (method, url) => request(app)[method](url).set("Authorization", `Bearer ${managerToken}`);
 
+const periodDates = () => {
+    const start = new Date(Date.UTC(2045, 0, 1 + counter * 16));
+    const end = new Date(start);
+    end.setUTCDate(end.getUTCDate() + 13);
+    return { startDate: start.toISOString().slice(0, 10), endDate: end.toISOString().slice(0, 10) };
+};
+
 const fixture = async ({
     status = "approved", locked = true, approval = true, lines = true,
-    lineStatus = "ok", bank = true, netPay = 942.35,
+    lineStatus = "complete", bank = true, netPay = 942.35,
 } = {}) => {
     const payPeriodId = nextUuid();
+    const { startDate, endDate } = periodDates();
     testPeriodIds.push(payPeriodId);
     await PayPeriod.create({
-        id: payPeriodId, start_date: "2026-08-01", end_date: "2026-08-15",
+        id: payPeriodId, start_date: startDate, end_date: endDate,
         status, is_locked: locked, locked_at: locked ? new Date() : null,
         total_gross: 1000, total_net: netPay,
+    });
+    const calculationRunId = nextUuid();
+    await sequelize.query(`INSERT INTO calculation_runs
+        (id, period_id, run_number, rate_set_id, status, total_gross,
+         total_net_payable, lines_complete, lines_incomplete, run_by)
+        VALUES (:id, :periodId, 1, :rateSetId, 'complete', 1050,
+                :netPay, :linesComplete, :linesIncomplete, :runBy)`, {
+        replacements: {
+            id: calculationRunId,
+            periodId: payPeriodId,
+            rateSetId: RATE_SET_ID,
+            netPay,
+            linesComplete: lines && lineStatus === "complete" ? 1 : 0,
+            linesIncomplete: lines && lineStatus !== "complete" ? 1 : 0,
+            runBy: managerId,
+        },
     });
     let staff;
     let payrollLine;
@@ -43,15 +68,18 @@ const fixture = async ({
             bank_account_no: bank ? `12345${counter}` : null,
         });
         payrollLine = await PayrollLine.create({
-            id: nextUuid(), pay_period_id: payPeriodId, staff_id: staff.id,
-            gross_pay: 1000, incentive_pay: 50, cpf_amount: 100, sdl_amount: 7.65,
-            net_pay: netPay, status: lineStatus,
+            id: nextUuid(), run_id: calculationRunId, period_id: payPeriodId, staff_id: staff.id,
+            gross_total: 1050, incentive_amount: 50, cpf_employee: 100, sdl: 7.65,
+            net_pay: netPay, line_status: lineStatus,
         });
     }
     if (approval) {
-        await Approval.create({ id: nextUuid(), pay_period_id: payPeriodId, decision: "approved", approved_by: "Test Manager" });
+        await Approval.create({
+            id: nextUuid(), pay_period_id: payPeriodId, calculation_run_id: calculationRunId,
+            decision: "approved", approved_by: "Test Manager",
+        });
     }
-    return { payPeriodId, staff, payrollLine };
+    return { payPeriodId, calculationRunId, staff, payrollLine, startDate, endDate };
 };
 
 beforeAll(async () => {
@@ -72,7 +100,10 @@ afterAll(async () => {
     if (testBatchIds.length) await PaymentBatch.destroy({ where: { id: testBatchIds }, force: true });
     await PaymentBatch.destroy({ where: { pay_period_id: testPeriodIds }, force: true });
     await Approval.destroy({ where: { pay_period_id: testPeriodIds }, force: true });
-    await PayrollLine.destroy({ where: { pay_period_id: testPeriodIds }, force: true });
+    await PayrollLine.destroy({ where: { period_id: testPeriodIds }, force: true });
+    await sequelize.query("DELETE FROM calculation_runs WHERE period_id IN (:periodIds)", {
+        replacements: { periodIds: testPeriodIds },
+    });
     await PayPeriod.destroy({ where: { id: testPeriodIds }, force: true });
     await Staff.destroy({ where: { id: testStaffIds }, force: true });
     await sequelize.close();
@@ -128,7 +159,7 @@ describe("Payment readiness", () => {
         const data = await fixture(options);
         const response = await auth("get", `/api/payments/preview?payPeriodId=${data.payPeriodId}`);
         expect(response.status).toBe(409);
-        expect(response.body.error).toBe(code);
+        expect(response.body.error.code).toBe(code);
     });
 
     test("missing bank details block generation and create no partial batch", async () => {
@@ -143,9 +174,37 @@ describe("Payment readiness", () => {
         expect(preview.body.employees[0].missingFields).toEqual(expect.arrayContaining(["bankCode", "bankAccountNumber"]));
         const response = await auth("post", "/api/payments/generate").send({ payPeriodId: data.payPeriodId });
         expect(response.status).toBe(424);
-        expect(response.body.error).toBe("MISSING_BANK_DETAILS");
-        expect(response.body.details[0].missingFields).toEqual(expect.arrayContaining(["bankCode", "bankAccountNumber"]));
+        expect(response.body.error.code).toBe("MISSING_BANK_DETAILS");
         expect(await PaymentBatch.count({ where: { pay_period_id: data.payPeriodId } })).toBe(0);
+    });
+
+    test("invalid bank details appear in preview and block generation", async () => {
+        const data = await fixture();
+        await data.staff.update({ bank_code: "!", bank_account_no: "12" });
+
+        const preview = await auth("get", `/api/payments/preview?payPeriodId=${data.payPeriodId}`);
+        expect(preview.status).toBe(200);
+        expect(preview.body.ready).toBe(false);
+        expect(preview.body.employees[0]).toMatchObject({
+            bankValidationStatus: "invalid",
+            bankValidationReason: "Bank code format is invalid.",
+        });
+
+        const generated = await auth("post", "/api/payments/generate").send({ payPeriodId: data.payPeriodId });
+        expect(generated.status).toBe(424);
+        expect(generated.body.error.code).toBe("INVALID_BANK_DETAILS");
+        expect(await PaymentBatch.count({ where: { pay_period_id: data.payPeriodId } })).toBe(0);
+    });
+
+    test("nonexistent pay period is rejected by preview and generation", async () => {
+        const payPeriodId = nextUuid();
+        const preview = await auth("get", `/api/payments/preview?payPeriodId=${payPeriodId}`);
+        expect(preview.status).toBe(404);
+        expect(preview.body.error.code).toBe("PAY_PERIOD_NOT_FOUND");
+
+        const generated = await auth("post", "/api/payments/generate").send({ payPeriodId });
+        expect(generated.status).toBe(404);
+        expect(generated.body.error.code).toBe("PAY_PERIOD_NOT_FOUND");
     });
 });
 
@@ -159,9 +218,9 @@ describe("Payment generation and secured CSV", () => {
         expect(response.body.data.totalAmount).toBe("942.35");
         expect(response.body.data.payPeriod).toEqual({
             id: data.payPeriodId,
-            startDate: "2026-08-01",
-            endDate: "2026-08-15",
-            status: "payment_ready",
+            startDate: data.startDate,
+            endDate: data.endDate,
+            status: "paid",
         });
         expect(response.body.data.generatedBy).toEqual({
             id: managerId,
@@ -172,7 +231,7 @@ describe("Payment generation and secured CSV", () => {
         expect(Number(item.cpf_amount)).toBe(100);
         expect(Number(item.sdl_amount)).toBe(7.65);
         const period = await PayPeriod.findByPk(data.payPeriodId);
-        expect(period.status).toBe("payment_ready");
+        expect(period.status).toBe("paid");
     });
 
     test("duplicate payment is prevented", async () => {
@@ -180,7 +239,7 @@ describe("Payment generation and secured CSV", () => {
         await auth("post", "/api/payments/generate").send({ payPeriodId: data.payPeriodId });
         const duplicate = await auth("post", "/api/payments/generate").send({ payPeriodId: data.payPeriodId });
         expect(duplicate.status).toBe(409);
-        expect(duplicate.body.error).toBe("DUPLICATE_PAYMENT_BATCH");
+        expect(duplicate.body.error.code).toBe("DUPLICATE_PAYMENT_BATCH");
     });
 
     test("CSV contains correct headers and approved value and creates audit log", async () => {
@@ -213,6 +272,12 @@ describe("Payment generation and secured CSV", () => {
         expect(response.status).toBe(200);
         expect(response.body.items[0].bankAccountNumber).toMatch(/^XXXX/);
         expect(response.body.items[0].bankAccountNumber).not.toBe(data.staff.bank_account_no);
+    });
+
+    test("nonexistent batch details return PAYMENT_BATCH_NOT_FOUND", async () => {
+        const response = await auth("get", `/api/payments/${nextUuid()}`);
+        expect(response.status).toBe(404);
+        expect(response.body.error.code).toBe("PAYMENT_BATCH_NOT_FOUND");
     });
 
     test("history search and dashboard statistics return generated batches", async () => {
@@ -290,13 +355,13 @@ describe("Payment file download", () => {
         testBatchIds.push(batch.id);
         const response = await auth("get", `/api/payments/${batch.id}/file`);
         expect(response.status).toBe(409);
-        expect(response.body.error).toBe("PAYMENT_FILE_EMPTY");
+        expect(response.body.error.code).toBe("PAYMENT_FILE_EMPTY");
     });
 
     test("nonexistent batch returns 404", async () => {
         const response = await auth("get", `/api/payments/${nextUuid()}/file`);
         expect(response.status).toBe(404);
-        expect(response.body.error).toBe("PAYMENT_BATCH_NOT_FOUND");
+        expect(response.body.error.code).toBe("PAYMENT_BATCH_NOT_FOUND");
     });
 
     test("unauthenticated download is rejected with 401", async () => {
@@ -324,7 +389,8 @@ describe("HRMS failure, retry, and cancellation", () => {
         const failed = await auth("post", "/api/payments/generate").send({ payPeriodId: data.payPeriodId });
         process.env.HRMS_SIMULATE_FAILURE = "false";
         expect(failed.status).toBe(502);
-        const batchId = failed.body.details[0].paymentBatchId;
+        const failedBatch = await PaymentBatch.findOne({ where: { pay_period_id: data.payPeriodId } });
+        const batchId = failedBatch.id;
         const retained = await PaymentBatch.findByPk(batchId);
         expect(retained.status).toBe("hrms_sync_failed");
         expect(await PaymentBatchItem.count({ where: { payment_batch_id: batchId } })).toBe(1);
@@ -341,7 +407,15 @@ describe("HRMS failure, retry, and cancellation", () => {
         const generated = await auth("post", "/api/payments/generate").send({ payPeriodId: data.payPeriodId });
         const response = await auth("patch", `/api/payments/${generated.body.data.id}/cancel`).send({ reason: "Should not be allowed" });
         expect(response.status).toBe(409);
-        expect(response.body.error).toBe("INVALID_CANCELLATION");
+        expect(response.body.error.code).toBe("INVALID_CANCELLATION");
+    });
+
+    test("completed batch cannot be retried through HRMS", async () => {
+        const data = await fixture();
+        const generated = await auth("post", "/api/payments/generate").send({ payPeriodId: data.payPeriodId });
+        const response = await auth("post", `/api/payments/${generated.body.data.id}/retry-hrms`).send({});
+        expect(response.status).toBe(409);
+        expect(response.body.error.code).toBe("INVALID_HRMS_RETRY");
     });
 
     test("HRMS-failed batch can be soft-cancelled", async () => {
@@ -349,11 +423,31 @@ describe("HRMS failure, retry, and cancellation", () => {
         process.env.HRMS_SIMULATE_FAILURE = "true";
         const failed = await auth("post", "/api/payments/generate").send({ payPeriodId: data.payPeriodId });
         process.env.HRMS_SIMULATE_FAILURE = "false";
-        const batchId = failed.body.details[0].paymentBatchId;
+        const failedBatch = await PaymentBatch.findOne({ where: { pay_period_id: data.payPeriodId } });
+        const batchId = failedBatch.id;
         const response = await auth("patch", `/api/payments/${batchId}/cancel`).send({ reason: "Manager cancelled failed batch" });
         expect(response.status).toBe(200);
         expect(response.body.data.status).toBe("cancelled");
         expect((await PaymentBatch.findByPk(batchId)).cancelled_at).not.toBeNull();
+    });
+
+    test("cancelled batch payment file cannot be downloaded", async () => {
+        const data = await fixture();
+        process.env.HRMS_SIMULATE_FAILURE = "true";
+        await auth("post", "/api/payments/generate").send({ payPeriodId: data.payPeriodId });
+        process.env.HRMS_SIMULATE_FAILURE = "false";
+        const batch = await PaymentBatch.findOne({ where: { pay_period_id: data.payPeriodId } });
+        await auth("patch", `/api/payments/${batch.id}/cancel`).send({ reason: "Cancel before file download" });
+
+        const response = await auth("get", `/api/payments/${batch.id}/file`);
+        expect(response.status).toBe(409);
+        expect(response.body.error.code).toBe("PAYMENT_BATCH_CANCELLED");
+    });
+
+    test("cancelling a nonexistent Payment Batch returns PAYMENT_BATCH_NOT_FOUND", async () => {
+        const response = await auth("patch", `/api/payments/${nextUuid()}/cancel`).send({ reason: "Valid cancellation reason" });
+        expect(response.status).toBe(404);
+        expect(response.body.error.code).toBe("PAYMENT_BATCH_NOT_FOUND");
     });
 });
 
@@ -365,5 +459,14 @@ describe("Missing bank management", () => {
         expect(response.body.data.bankAccountNumber).toBe("XXXX6655");
         const audit = await AuditLog.findOne({ where: { action: "BANK_DETAILS_UPDATED", entity_id: data.staff.id } });
         expect(JSON.stringify(audit.details)).not.toContain("9988776655");
+    });
+
+    test("updating bank details for nonexistent staff returns STAFF_NOT_FOUND", async () => {
+        const response = await auth("patch", `/api/staff/${nextUuid()}/bank-details`).send({
+            bankCode: "7339",
+            bankAccountNumber: "9988776655",
+        });
+        expect(response.status).toBe(404);
+        expect(response.body.error.code).toBe("STAFF_NOT_FOUND");
     });
 });

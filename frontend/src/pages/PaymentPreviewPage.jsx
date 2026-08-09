@@ -162,6 +162,9 @@ export default function PaymentPreviewPage() {
   const openReview = () => navigate(`/payments/review-employees?payPeriodId=${encodeURIComponent(selectedId)}&tab=missing`, { state: { selectedId, rows } });
   const handleRefresh = async () => {
     if (loadingPeriods || checking) return;
+    setSearch("");
+    setStatusFilter("all");
+    setPage(0);
     const resolvedId = await loadPeriods();
     if (resolvedId && resolvedId === selectedId) await checkReadiness();
   };
