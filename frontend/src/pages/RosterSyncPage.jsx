@@ -1,5 +1,5 @@
 import { Fragment, useEffect, useState } from "react";
-import { fetchPayPeriods, fetchResolvedExceptions, fetchSyncHistory, fetchSyncSummary, resetPeriodResolutions, simulateSheetDown, triggerImportNow, undoException } from "../api/roster";
+import { fetchPayPeriods, fetchResolvedExceptions, fetchSourceHealth, fetchSyncHistory, fetchSyncSummary, resetPeriodResolutions, simulateSheetDown, triggerImportNow, undoException } from "../api/roster";
 import { getStaff } from "../api/staff";
 import ExceptionList from "../components/ExceptionList";
 import SyncHistoryList from "../components/SyncHistoryList";
@@ -17,6 +17,7 @@ function RosterSyncPage() {
   const [errorMessage, setErrorMessage] = useState("");
   const [preservedDraft, setPreservedDraft] = useState(false);
   const [expandedStaffId, setExpandedStaffId] = useState(null);
+  const [sourceHealth, setSourceHealth] = useState(null);
   const today = new Date();
   const windowStart = new Date(today);
   const windowEnd = new Date(today);
@@ -45,6 +46,12 @@ function RosterSyncPage() {
         refresh(selected.id).catch((error) => setErrorMessage(error.message));
       }
     }).catch((error) => setErrorMessage(error.message));
+  }, []);
+
+  useEffect(() => {
+    fetchSourceHealth()
+      .then(setSourceHealth)
+      .catch(() => setSourceHealth(null));
   }, []);
 
   async function applyResult(result) {
@@ -108,6 +115,7 @@ function RosterSyncPage() {
   return (
     <main className="roster-page">
       <header className="roster-intro"><h1>UC-001: Roster Sync</h1><p>Import roster shifts, match staff, and maintain draft timesheets for the selected pay period.</p></header>
+      {sourceHealth && <section className="roster-controls" aria-label="Roster source health"><span className={sourceHealth.database === "connected" ? "roster-synced" : "roster-critical"}>Database: {sourceHealth.database === "connected" ? "Connected" : "Disconnected"}</span><span className={sourceHealth.googleSheet === "connected" ? "roster-synced" : "roster-critical"}>Google Sheet: {sourceHealth.googleSheet === "connected" ? "Connected" : "Disconnected"}</span></section>}
       <section className="roster-controls">
         <label htmlFor="pay-period">Pay period</label>
         <select id="pay-period" value={selectedPayPeriodId} onChange={(event) => { setSelectedPayPeriodId(event.target.value); setExpandedStaffId(null); refresh(event.target.value).catch((error) => setErrorMessage(error.message)); }} disabled={loading}>
