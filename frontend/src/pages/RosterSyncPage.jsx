@@ -1,5 +1,5 @@
 import { Fragment, useEffect, useState } from "react";
-import { fetchPayPeriods, fetchSyncHistory, fetchSyncSummary, simulateSheetDown, triggerImportNow } from "../api/roster";
+import { fetchPayPeriods, fetchResolvedExceptions, fetchSyncHistory, fetchSyncSummary, resetPeriodResolutions, simulateSheetDown, triggerImportNow, undoException } from "../api/roster";
 import { getStaff } from "../api/staff";
 import ExceptionList from "../components/ExceptionList";
 import SyncHistoryList from "../components/SyncHistoryList";
@@ -12,6 +12,7 @@ function RosterSyncPage() {
   const [selectedPayPeriodId, setSelectedPayPeriodId] = useState("");
   const [summary, setSummary] = useState(null);
   const [history, setHistory] = useState([]);
+  const [resolvedExceptions, setResolvedExceptions] = useState([]);
   const [loading, setLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
   const [preservedDraft, setPreservedDraft] = useState(false);
@@ -28,9 +29,10 @@ function RosterSyncPage() {
   });
 
   async function refresh(payPeriodId) {
-    const [nextSummary, nextHistory] = await Promise.all([fetchSyncSummary(payPeriodId), fetchSyncHistory(payPeriodId)]);
+    const [nextSummary, nextHistory, nextResolvedExceptions] = await Promise.all([fetchSyncSummary(payPeriodId), fetchSyncHistory(payPeriodId), fetchResolvedExceptions(payPeriodId)]);
     setSummary(nextSummary);
     setHistory(nextHistory.history);
+    setResolvedExceptions(nextResolvedExceptions.resolvedExceptions);
   }
 
   useEffect(() => {
@@ -56,8 +58,9 @@ function RosterSyncPage() {
       setSummary(result);
       setPreservedDraft(false);
     }
-    const nextHistory = await fetchSyncHistory(selectedPayPeriodId);
+    const [nextHistory, nextResolvedExceptions] = await Promise.all([fetchSyncHistory(selectedPayPeriodId), fetchResolvedExceptions(selectedPayPeriodId)]);
     setHistory(nextHistory.history);
+    setResolvedExceptions(nextResolvedExceptions.resolvedExceptions);
   }
 
   async function runImport(action) {
@@ -67,6 +70,34 @@ function RosterSyncPage() {
     setPreservedDraft(false);
     try {
       await applyResult(await action(selectedPayPeriodId));
+    } catch (error) {
+      setErrorMessage(error.message);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function undoResolvedException(timesheetRowId) {
+    setLoading(true);
+    setErrorMessage("");
+    try {
+      await undoException(timesheetRowId);
+      await refresh(selectedPayPeriodId);
+    } catch (error) {
+      setErrorMessage(error.message);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function resetResolutions() {
+    if (!window.confirm("This will undo ALL manual fixes for this period and re-sync fresh from the sheet. Continue?")) return;
+    setLoading(true);
+    setErrorMessage("");
+    setPreservedDraft(false);
+    try {
+      await resetPeriodResolutions(selectedPayPeriodId);
+      await refresh(selectedPayPeriodId);
     } catch (error) {
       setErrorMessage(error.message);
     } finally {
@@ -84,6 +115,7 @@ function RosterSyncPage() {
         </select>
         <button className="roster-primary" onClick={() => runImport(triggerImportNow)} disabled={loading || !selectedPayPeriodId}>{loading ? "Syncing..." : "Import Now"}</button>
         <button className="roster-secondary" onClick={() => runImport(simulateSheetDown)} disabled={loading || !selectedPayPeriodId}>Simulate Sheet Down</button>
+        <button className="roster-secondary" onClick={resetResolutions} disabled={loading || !selectedPayPeriodId}>Reset Period</button>
       </section>
       {errorMessage && <p className="roster-banner roster-error">{errorMessage}</p>}
       {preservedDraft && <p className="roster-banner roster-info">Last synced draft preserved; the live import could not complete.</p>}
@@ -91,6 +123,7 @@ function RosterSyncPage() {
       <section className="roster-card"><h2>Draft Timesheet Totals</h2>{summary?.draftTimesheets?.length ? <div className="roster-table-scroll"><table><thead><tr><th>Staff ID</th><th>Name</th><th>Total hours</th><th>Shifts</th></tr></thead><tbody>{summary.draftTimesheets.map((staff) => <Fragment key={staff.staffId}><tr className="roster-expandable" onClick={() => setExpandedStaffId(expandedStaffId === staff.staffId ? null : staff.staffId)}><td>{staff.staffId}</td><td>{staff.fullName}</td><td>{staff.totalHours}</td><td>{expandedStaffId === staff.staffId ? "▲" : "▼"} {staff.shifts.length}</td></tr>{expandedStaffId === staff.staffId && <tr className="roster-breakdown"><td colSpan="4"><table><thead><tr><th>Date</th><th>Time</th><th>Hours</th><th>Matched by</th></tr></thead><tbody>{staff.shifts.map((shift, index) => <tr key={`${shift.date}-${index}`}><td>{shift.date}</td><td>{shift.clockIn}–{shift.clockOut}</td><td>{shift.hours}</td><td>{shift.matchedBy === "name" ? "Name fallback" : "Staff ID"}</td></tr>)}</tbody></table></td></tr>}</Fragment>)}</tbody></table></div> : <p className="roster-empty">No draft timesheets yet — run a sync to populate this table.</p>}</section>
       <section className="roster-card"><h2>Unmatched Entries</h2><ExceptionList items={summary?.unmatched} activeStaff={activeStaff} onResolved={() => refresh(selectedPayPeriodId)} /></section>
       <section className="roster-card"><h2>Data Issues</h2><ExceptionList items={summary?.invalidTime} variant="invalidTime" activeStaff={activeStaff} onResolved={() => refresh(selectedPayPeriodId)} /></section>
+      <section className="roster-card"><h2>Resolved</h2>{resolvedExceptions.length ? <ul className="roster-exception-list">{resolvedExceptions.map((entry) => <li key={entry.id} className="roster-synced"><strong>{entry.full_name || entry.roster_raw_name || entry.source_key}</strong><small>{entry.shift_date} · {{ staff_linked: "Linked to staff", clock_times_updated: "Clock times fixed", ignored: "Ignored" }[entry.resolution_type] || entry.resolution_type}</small><button className="roster-secondary" onClick={() => undoResolvedException(entry.id)} disabled={loading}>Undo</button></li>)}</ul> : <p className="roster-empty">No resolved exceptions for this period.</p>}</section>
       <section className="roster-card"><h2>Sync History</h2><SyncHistoryList history={history} /></section>
     </main>
   );

@@ -27,4 +27,16 @@ function resolveException(timesheetRowId, resolution) {
   return apiPost(`/api/roster/exceptions/${timesheetRowId}/resolve`, resolution);
 }
 
-export { fetchPayPeriods, fetchSyncSummary, fetchSyncHistory, triggerImportNow, simulateSheetDown, resolveException };
+function fetchResolvedExceptions(payPeriodId) {
+  return apiGet(`/api/roster/exceptions/resolved?payPeriodId=${payPeriodId}`);
+}
+
+function undoException(timesheetRowId) {
+  return apiPost(`/api/roster/exceptions/${timesheetRowId}/undo`, {});
+}
+
+function resetPeriodResolutions(payPeriodId) {
+  return apiPost("/api/roster/exceptions/reset", { payPeriodId });
+}
+
+export { fetchPayPeriods, fetchSyncSummary, fetchSyncHistory, triggerImportNow, simulateSheetDown, resolveException, fetchResolvedExceptions, undoException, resetPeriodResolutions };
