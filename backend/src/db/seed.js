@@ -22,7 +22,17 @@ async function runSeeds() {
     const filePath = path.join(seedsDir, file);
     const sql = fs.readFileSync(filePath, "utf8");
     console.log(`Running seed: ${file}`);
-    await pool.query(sql);
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN");
+      await client.query(sql);
+      await client.query("COMMIT");
+    } catch (error) {
+      await client.query("ROLLBACK");
+      throw new Error(`Seed ${file} failed: ${error.message}`);
+    } finally {
+      client.release();
+    }
     console.log(`Completed: ${file}`);
   }
 

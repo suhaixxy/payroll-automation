@@ -4,6 +4,7 @@ import AppLayout from "./components/AppLayout";
 import { AuthProvider, useAuth } from "./context/AuthContext";
 
 import ApprovalPage from "./pages/ApprovalPage";
+import BackpayReportsPage from "./pages/BackpayReportsPage";
 import DashboardPage from "./pages/DashboardPage";
 import LoginPage from "./pages/LoginPage";
 import NotFoundPage from "./pages/NotFoundPage";
@@ -62,6 +63,7 @@ export default function App() {
               <Route path="/roster" element={<RosterSyncPage />} />
               <Route path="/staff" element={<StaffPage />} />
               <Route path="/pay-periods" element={<PayPeriodsPage />} />
+              <Route path="/backpay-reports" element={<BackpayReportsPage />} />
 
               {/* UC-002 */}
               <Route

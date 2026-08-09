@@ -1,6 +1,5 @@
 // Placeholder (scaffold) — an empty file fails the whole jest run, so this
 // carries a todo until the UC-004 owner adds real tests.
-test.todo('UC-004 approval flow tests (owner: UC-004)');
 const approvalService = require("../src/services/approvalService");
 
 // Access the internal validationError via submitDecision's behaviour by
@@ -14,7 +13,7 @@ const approvalService = require("../src/services/approvalService");
 describe("UC-004 Approve Payroll - validation rules", () => {
   const validBase = {
     payPeriodId: "11111111-1111-1111-1111-111111111111",
-    approvedBy: "Managing Director",
+    calculationRunId: "22222222-2222-2222-2222-222222222222",
   };
 
   test("rejecting without a comment is blocked with COMMENT_REQUIRED", async () => {
@@ -38,12 +37,11 @@ describe("UC-004 Approve Payroll - validation rules", () => {
     );
   });
 
-  test("a missing approver is blocked with VALIDATION_ERROR", async () => {
+  test("a missing calculation run is blocked with VALIDATION_ERROR", async () => {
     const result = await approvalService.submitDecision({
       payPeriodId: validBase.payPeriodId,
       decision: "approved",
-      approvedBy: "   ",
-    });
+    }, { id: "33333333-3333-3333-3333-333333333333", fullName: "Manager" });
     expect(result).toEqual(
       expect.objectContaining({ error: "VALIDATION_ERROR" })
     );
@@ -52,7 +50,7 @@ describe("UC-004 Approve Payroll - validation rules", () => {
   test("a missing payPeriodId is blocked with VALIDATION_ERROR", async () => {
     const result = await approvalService.submitDecision({
       decision: "approved",
-      approvedBy: "Managing Director",
+      calculationRunId: validBase.calculationRunId,
     });
     expect(result).toEqual(
       expect.objectContaining({ error: "VALIDATION_ERROR" })

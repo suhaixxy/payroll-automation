@@ -71,6 +71,15 @@ const formatPeriodStatus = (status) => status
   ? status.split("_").map((word) => word[0].toUpperCase() + word.slice(1)).join(" ")
   : null;
 
+const periodDescription = (status) => ({
+  draft: "Roster and timesheets in progress",
+  validated: "Timesheets validated",
+  calculated: "Payroll calculated",
+  pending_approval: "Awaiting manager approval",
+  approved: "Approved and ready for payment",
+  paid: "Payment completed",
+}[status] || "Payroll status unavailable");
+
 function DashboardSummaryCard({ icon, label, value, description, loading, badge, periodRange }) {
   return (
     <Card className={`dashboard-summary-card${periodRange ? " dashboard-summary-card-pay-period" : ""}`}>
@@ -155,7 +164,7 @@ export default function DashboardPage() {
           } : null}
           value="No active period"
           badge={formatPeriodStatus(currentPayPeriod?.status)}
-          description={currentPayPeriod ? "Payroll in progress" : "No pay period covers today"}
+          description={currentPayPeriod ? periodDescription(currentPayPeriod.status) : "No pay period covers today"}
           loading={loading}
         />
         <DashboardSummaryCard

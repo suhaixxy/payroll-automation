@@ -5,7 +5,11 @@ module.exports = (sequelize, DataTypes) => {
             defaultValue: DataTypes.UUIDV4,
             primaryKey: true
         },
-        pay_period_id: {
+        run_id: {
+            type: DataTypes.UUID,
+            allowNull: false
+        },
+        period_id: {
             type: DataTypes.UUID,
             allowNull: false
         },
@@ -13,19 +17,19 @@ module.exports = (sequelize, DataTypes) => {
             type: DataTypes.UUID,
             allowNull: false
         },
-        gross_pay: {
+        gross_total: {
             type: DataTypes.DECIMAL(12,2),
             defaultValue: 0
         },
-        incentive_pay: {
+        incentive_amount: {
             type: DataTypes.DECIMAL(12,2),
             defaultValue: 0
         },
-        cpf_amount: {
+        cpf_employee: {
             type: DataTypes.DECIMAL(12,2),
             defaultValue: 0
         },
-        sdl_amount: {
+        sdl: {
             type: DataTypes.DECIMAL(12,2),
             defaultValue: 0
         },
@@ -33,17 +37,17 @@ module.exports = (sequelize, DataTypes) => {
             type: DataTypes.DECIMAL(12,2),
             defaultValue: 0
         },
-        status: {
+        line_status: {
             type: DataTypes.ENUM(
-                "ok",
+                "complete",
                 "incomplete"
             ),
-            defaultValue: "ok"
+            defaultValue: "complete"
         }
     }, {
-        tableName: "payroll_line",
+        tableName: "payroll_lines",
         underscored: true,
-        timestamps: true
+        timestamps: false
     });
     return PayrollLine;
 };

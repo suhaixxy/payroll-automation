@@ -10,7 +10,8 @@ const request = require('supertest');
 const app = require('../src/app');
 const { pool } = require('../src/config/database');
 const { initializeDatabase } = require('../src/db/initializeDatabase');
-const { sequelize, syncUc003Tables, User } = require('../src/models');
+const { sequelize } = require('../src/models');
+const { createAndLogin, deleteTestUsers } = require('./helpers/authFixtures');
 
 const ACCOUNTING_EMAIL = 'uc003-pi-accounting@test.local';
 const MANAGER_EMAIL = 'uc003-pi-manager@test.local';
@@ -24,9 +25,7 @@ let staffId;
 let inputId;
 
 async function registerAndLogin(name, email, role) {
-  await request(app).post('/api/user/register').send({ name, email, password: PASSWORD, role });
-  const login = await request(app).post('/api/user/login').send({ email, password: PASSWORD });
-  return login.body.accessToken;
+  return createAndLogin(app, { name, email, password: PASSWORD, role });
 }
 
 async function cleanup() {
@@ -49,22 +48,17 @@ async function cleanup() {
   }
   await pool.query(`DELETE FROM cpf_rate_bands WHERE rate_set_id = $1`, [TEST_RATE_SET_ID]);
   await pool.query(`DELETE FROM statutory_rate_sets WHERE id = $1`, [TEST_RATE_SET_ID]);
-  await pool.query(
-    `DELETE FROM uc003_audit_log WHERE actor_id IN (SELECT id FROM users WHERE email = ANY($1))`,
-    [[ACCOUNTING_EMAIL, MANAGER_EMAIL]]
-  );
-  await User.destroy({ where: { email: [ACCOUNTING_EMAIL, MANAGER_EMAIL] } });
+  await deleteTestUsers(pool, [ACCOUNTING_EMAIL, MANAGER_EMAIL]);
 }
 
 beforeAll(async () => {
   await initializeDatabase();
-  await syncUc003Tables();
   await cleanup();
 
-  accountingToken = await registerAndLogin('PI Accounting', ACCOUNTING_EMAIL, 'accounting');
+  accountingToken = await registerAndLogin('PI Employee', ACCOUNTING_EMAIL, 'employee');
   managerToken = await registerAndLogin('PI Manager', MANAGER_EMAIL, 'manager');
 
-  const { rows: userRows } = await pool.query(`SELECT id FROM users WHERE email = $1`, [MANAGER_EMAIL]);
+  const { rows: userRows } = await pool.query(`SELECT id FROM user_account WHERE email = $1`, [MANAGER_EMAIL]);
   await pool.query(
     `INSERT INTO statutory_rate_sets
        (id, version_label, effective_from, effective_to, sdl_rate, sdl_min, sdl_max,
@@ -158,7 +152,7 @@ describe('RBAC and validation (§2.2, §2.6)', () => {
 
 describe('resolve loop (§5.8) — the phase 5 gate', () => {
   test('calculate first: the full-timer line is incomplete, MISSING_PERFORMANCE_INPUT', async () => {
-    const run = await asAccounting(request(app).post(`/api/uc003/periods/${periodId}/calculate`));
+    const run = await asManager(request(app).post(`/api/uc003/periods/${periodId}/calculate`));
     expect(run.status).toBe(201);
 
     const line = await fetchLine();
@@ -180,7 +174,7 @@ describe('resolve loop (§5.8) — the phase 5 gate', () => {
     expect(created.status).toBe(201);
     inputId = created.body.data.id;
 
-    const recalc = await asAccounting(request(app).post(`/api/uc003/periods/${periodId}/recalculate`));
+    const recalc = await asManager(request(app).post(`/api/uc003/periods/${periodId}/recalculate`));
     expect(recalc.status).toBe(201);
 
     const line = await fetchLine();

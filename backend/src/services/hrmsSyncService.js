@@ -51,7 +51,7 @@ exports.sync = async ({ batchId, user, ipAddress, isRetry = false }) => {
             hrms_error_message: null,
             hrms_synced_at: new Date(),
         }, { transaction });
-        await PayPeriod.update({ status: "payment_ready" }, { where: { id: batch.pay_period_id }, transaction });
+        await PayPeriod.update({ status: "paid" }, { where: { id: batch.pay_period_id, status: "approved" }, transaction });
         payslips = await payslipService.generateForBatch({ batchId: batch.id, transaction });
     });
     await auditService.record({ user, action: "HRMS_SYNC_SUCCESS", entityType: "payment_batch", entityId: batch.id, ipAddress, details: { externalReference: result.externalReference, acceptedRecords: result.acceptedRecords } });

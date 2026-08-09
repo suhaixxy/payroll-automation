@@ -85,10 +85,10 @@ const SELECT_RATE_SET = `
          r.ot_multiplier AS "otMultiplier",
          r.ph_multiplier AS "phMultiplier",
          r.cpf_ow_ceiling AS "cpfOwCeiling",
-         u.name AS "createdByName",
+         COALESCE(u.full_name, 'Legacy user') AS "createdByName",
          to_char(r.created_at, 'YYYY-MM-DD"T"HH24:MI:SSOF') AS "createdAt"
   FROM statutory_rate_sets r
-  JOIN users u ON u.id = r.created_by
+  LEFT JOIN user_account u ON u.id = r.created_by
   WHERE r.deleted_at IS NULL`;
 
 async function loadBands(rateSetId) {

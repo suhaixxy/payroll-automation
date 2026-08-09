@@ -1,24 +1,23 @@
 import { useEffect, useState } from "react";
+import apiClient from "../api/client";
+import { useAuth } from "../context/AuthContext";
 
-const API_URL = `${import.meta.env.VITE_BACKEND_URL || "http://localhost:5000"}/api/approvals`;
 const money = new Intl.NumberFormat("en-SG", { style: "currency", currency: "SGD" });
 const label = (value) => (value || "").replaceAll("_", " ");
 const fmtDate = (v) => new Date(v).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric", timeZone: "UTC" });
 
 async function request(path, options) {
-  const response = await fetch(`${API_URL}${path}`, options);
-  const data = await response.json();
-  if (!response.ok) throw new Error(data.message || data.error?.message || "Something went wrong.");
-  return data;
+  const response = await apiClient.request({ url: `/approvals${path}`, ...options });
+  return response.data;
 }
 
 function ApprovalPage() {
+  const { user } = useAuth();
   const [periods, setPeriods] = useState([]);
   const [periodId, setPeriodId] = useState("");
   const [summary, setSummary] = useState(null);
   const [selectedLine, setSelectedLine] = useState(null);
   const [decision, setDecision] = useState("approved");
-  const [approvedBy, setApprovedBy] = useState("Managing Director");
   const [comment, setComment] = useState("");
   const [message, setMessage] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -55,8 +54,8 @@ function ApprovalPage() {
     event.preventDefault();
     try {
       const result = await request("/", {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ payPeriodId: periodId, decision, approvedBy, comment }),
+        method: "POST",
+        data: { payPeriodId: periodId, calculationRunId: summary.calculationRunId, decision, comment },
       });
       setMessage({ type: "success", text: decision === "approved" ? `Payroll approved by ${result.approvedBy}.` : "Payroll rejected and returned for calculation." });
       setComment("");
@@ -88,7 +87,7 @@ function ApprovalPage() {
         </table>
       </section>
       {summary.status === "pending_approval" && <section className="panel decision"><h2>Record decision</h2><form onSubmit={submitDecision}>
-        <label>Approver name<input value={approvedBy} onChange={(event) => setApprovedBy(event.target.value)} required /></label>
+        <label>Approver<input value={user?.fullName || user?.email || "Authenticated manager"} readOnly /></label>
         <label>Decision<select value={decision} onChange={(event) => setDecision(event.target.value)}><option value="approved">Approve payroll</option><option value="rejected">Reject payroll</option></select></label>
         {decision === "rejected" && <label>Reason for rejection<textarea value={comment} onChange={(event) => setComment(event.target.value)} required placeholder="Explain what needs to be corrected" /></label>}
         <button type="submit" className={decision === "approved" ? "approve" : "reject"}>{decision === "approved" ? "Approve payroll" : "Reject payroll"}</button>

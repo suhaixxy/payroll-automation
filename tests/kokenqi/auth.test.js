@@ -23,8 +23,21 @@ describe("Authentication API", () => {
             password: "WrongPassword123!",
         });
         expect(response.status).toBe(401);
-        expect(response.body.error).toBe("INVALID_CREDENTIALS");
-        expect(response.body.message).not.toMatch(/email exists|password only/i);
+        expect(response.body.error.code).toBe("INVALID_CREDENTIALS");
+        expect(response.body.error.message).toBe("The email or password is incorrect.");
+        expect(response.body.error.message).not.toMatch(/email exists|password only/i);
+    });
+
+    test("unknown email returns the same generic credentials error", async () => {
+        const response = await request(app).post("/api/auth/login").send({
+            email: "unknown@payroll.local",
+            password: "WrongPassword123!",
+        });
+        expect(response.status).toBe(401);
+        expect(response.body.error).toMatchObject({
+            code: "INVALID_CREDENTIALS",
+            message: "The email or password is incorrect.",
+        });
     });
 
     test("disabled user cannot log in", async () => {
@@ -33,13 +46,16 @@ describe("Authentication API", () => {
             password: "Disabled123!",
         });
         expect(response.status).toBe(403);
-        expect(response.body.error).toBe("ACCOUNT_DISABLED");
+        expect(response.body.error).toMatchObject({
+            code: "ACCOUNT_DISABLED",
+            message: "This account is disabled.",
+        });
     });
 
     test("missing token cannot access current user", async () => {
         const response = await request(app).get("/api/auth/me");
         expect(response.status).toBe(401);
-        expect(response.body.error).toBe("AUTHENTICATION_REQUIRED");
+        expect(response.body.error.code).toBe("AUTHENTICATION_REQUIRED");
     });
 
     test("invalid token cannot access current user", async () => {
@@ -47,7 +63,7 @@ describe("Authentication API", () => {
             .get("/api/auth/me")
             .set("Authorization", "Bearer invalid-token");
         expect(response.status).toBe(401);
-        expect(response.body.error).toBe("INVALID_TOKEN");
+        expect(response.body.error.code).toBe("INVALID_TOKEN");
     });
 
     test("authenticated user can load profile and log out", async () => {

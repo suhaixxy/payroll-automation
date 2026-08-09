@@ -3,14 +3,12 @@ import {
   ApprovalRounded,
   BadgeRounded,
   CalculateRounded,
-  CalendarMonthRounded,
   DashboardRounded,
   DescriptionRounded,
   ExpandLessRounded,
   ExpandMoreRounded,
   FactCheckRounded,
   FolderSharedRounded,
-  GroupsRounded,
   LogoutRounded,
   MenuRounded,
   PaymentsRounded,
@@ -64,11 +62,13 @@ const rosterStaffLinks = [
   { label: "Roster Sync", path: "/roster", icon: <SyncAltRounded /> },
   { label: "Staff", path: "/staff", icon: <BadgeRounded /> },
   { label: "Pay Periods", path: "/pay-periods", icon: <TodayRounded /> },
+  { label: "Backpay Reports", path: "/backpay-reports", icon: <DescriptionRounded /> },
 ];
 
 const pageTitles = [
   { match: /^\/dashboard$/, title: "Dashboard" },
   { match: /^\/roster$/, title: "Roster Sync" },
+  { match: /^\/backpay-reports$/, title: "Backpay Reports" },
   { match: /^\/timesheets$/, title: "Timesheet Validation" },
   { match: /^\/payroll$/, title: "Payroll Calculation" },
   { match: /^\/approvals$/, title: "Approvals" },
@@ -177,10 +177,6 @@ function Sidebar({ onNavigate }) {
               </List>
             </Collapse>
             <SidebarLink icon={<ApprovalRounded />} label="Approvals" path="/approvals" active={location.pathname === "/approvals"} onNavigate={onNavigate} />
-            <ListItemButton className="sidebar-link sidebar-link-unavailable" disabled>
-              <ListItemIcon><GroupsRounded /></ListItemIcon>
-              <ListItemText primary="Employees" secondary="Not available" />
-            </ListItemButton>
             <ListItemButton
               className={`sidebar-link sidebar-parent-link${isPaymentRoute ? " sidebar-parent-active" : ""}`}
               onClick={() => setPaymentsOpen((open) => !open)}
