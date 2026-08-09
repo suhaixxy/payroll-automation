@@ -12,6 +12,7 @@ router.use("/approvals", require("./approvals"));
 router.use("/payments", require("./payments"));
 router.use("/staff", require("./staff"));
 router.use("/pay-periods", require("./payPeriods"));
+router.use("/backpay-reports", require("./backpay"));
 
 // UC-005
 router.use("/auth", require("./auth"));
