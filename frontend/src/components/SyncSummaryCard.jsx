@@ -1,15 +1,33 @@
+import { AccessTimeRounded, GroupsRounded, UpdateRounded, WarningAmberRounded } from "@mui/icons-material";
+import { Box, Card, CardContent, Typography } from "@mui/material";
+import { formatDateTime } from "../utils";
+
+function SyncMetric({ icon, label, value, tone = "primary" }) {
+  return (
+    <Card className={`roster-sync-metric is-${tone}`}>
+      <CardContent>
+        <Box className="roster-sync-metric-icon">{icon}</Box>
+        <Box>
+          <Typography className="roster-sync-metric-label">{label}</Typography>
+          <Typography className="roster-sync-metric-value">{value}</Typography>
+        </Box>
+      </CardContent>
+    </Card>
+  );
+}
+
 function SyncSummaryCard({ summary }) {
   if (!summary || !summary.success) return null;
 
-  const lastSynced = summary.syncedAt ? new Date(summary.syncedAt).toLocaleString() : "—";
+  const lastSynced = summary.syncedAt ? formatDateTime(summary.syncedAt) : "—";
 
   return (
-    <div className="roster-stat-grid">
-      <div className="roster-stat-tile"><p>Staff synced</p><strong>{summary.staffSynced}</strong></div>
-      <div className="roster-stat-tile"><p>Total hours</p><strong>{summary.totalHours}</strong></div>
-      <div className="roster-stat-tile"><p>Unmatched</p><strong className={summary.unmatchedCount ? "roster-warning" : ""}>{summary.unmatchedCount}</strong></div>
-      <div className="roster-stat-tile"><p>Last synced</p><strong className="roster-time">{lastSynced}</strong></div>
-    </div>
+    <Box className="roster-sync-metrics">
+      <SyncMetric icon={<GroupsRounded />} label="Staff Synced" value={summary.staffSynced} />
+      <SyncMetric icon={<AccessTimeRounded />} label="Total Hours" value={summary.totalHours} />
+      <SyncMetric icon={<WarningAmberRounded />} label="Unmatched" value={summary.unmatchedCount} tone={summary.unmatchedCount ? "warning" : "success"} />
+      <SyncMetric icon={<UpdateRounded />} label="Last Synced" value={lastSynced} />
+    </Box>
   );
 }
 

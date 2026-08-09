@@ -7,12 +7,19 @@ const STAFF_COLUMNS = `
   external_ref AS "externalRef",
   full_name AS "fullName",
   employment_type AS "employmentType",
+  department,
+  role,
+  email,
+  phone,
+  to_char(date_joined, 'YYYY-MM-DD') AS "dateJoined",
+  max_weekly_hours AS "maxWeeklyHours",
   status
 `;
 
 const STAFF_ID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const EMPLOYMENT_TYPES = new Set(["full_time", "part_time"]);
 const STAFF_STATUSES = new Set(["active", "inactive"]);
+const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 const validateStaffId = (id) => {
   if (!STAFF_ID_PATTERN.test(id)) {
@@ -62,12 +69,21 @@ exports.create = async (req, res, next) => {
   try {
     const externalRef = typeof req.body.external_ref === "string" ? req.body.external_ref.trim() : "";
     const fullName = typeof req.body.full_name === "string" ? req.body.full_name.trim() : "";
+    const department = typeof req.body.department === "string" ? req.body.department.trim() || null : null;
+    const role = typeof req.body.role === "string" ? req.body.role.trim() || null : null;
+    const email = typeof req.body.email === "string" ? req.body.email.trim() || null : null;
+    const phone = typeof req.body.phone === "string" ? req.body.phone.trim() || null : null;
+    const dateJoined = req.body.date_joined ?? null;
+    const maxWeeklyHours = req.body.max_weekly_hours ?? null;
     const { employment_type: employmentType } = req.body;
 
     if (!externalRef || !fullName || !employmentType) {
       throw new AppError(400, "VALIDATION_ERROR", "external_ref, full_name, and employment_type are required.");
     }
     validateEmploymentType(employmentType);
+    if (email && !EMAIL_PATTERN.test(email)) {
+      throw new AppError(400, "VALIDATION_ERROR", "email must be a valid email address.");
+    }
 
     const existing = await pool.query("SELECT 1 FROM staff WHERE external_ref = $1", [externalRef]);
     if (existing.rows[0]) {
@@ -75,10 +91,10 @@ exports.create = async (req, res, next) => {
     }
 
     const result = await pool.query(
-      `INSERT INTO staff (external_ref, full_name, employment_type)
-       VALUES ($1, $2, $3)
+      `INSERT INTO staff (external_ref, full_name, employment_type, department, role, email, phone, date_joined, max_weekly_hours)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
        RETURNING ${STAFF_COLUMNS}`,
-      [externalRef, fullName, employmentType],
+      [externalRef, fullName, employmentType, department, role, email, phone, dateJoined, maxWeeklyHours],
     );
     res.status(201).json(result.rows[0]);
   } catch (error) {
@@ -115,8 +131,36 @@ exports.update = async (req, res, next) => {
       values.push(req.body.status);
       updates.push(`status = $${values.length}`);
     }
+    if (Object.prototype.hasOwnProperty.call(req.body, "department")) {
+      values.push(typeof req.body.department === "string" ? req.body.department.trim() || null : null);
+      updates.push(`department = $${values.length}`);
+    }
+    if (Object.prototype.hasOwnProperty.call(req.body, "role")) {
+      values.push(typeof req.body.role === "string" ? req.body.role.trim() || null : null);
+      updates.push(`role = $${values.length}`);
+    }
+    if (Object.prototype.hasOwnProperty.call(req.body, "email")) {
+      const email = typeof req.body.email === "string" ? req.body.email.trim() || null : null;
+      if (email && !EMAIL_PATTERN.test(email)) {
+        throw new AppError(400, "VALIDATION_ERROR", "email must be a valid email address.");
+      }
+      values.push(email);
+      updates.push(`email = $${values.length}`);
+    }
+    if (Object.prototype.hasOwnProperty.call(req.body, "phone")) {
+      values.push(typeof req.body.phone === "string" ? req.body.phone.trim() || null : null);
+      updates.push(`phone = $${values.length}`);
+    }
+    if (Object.prototype.hasOwnProperty.call(req.body, "date_joined")) {
+      values.push(req.body.date_joined ?? null);
+      updates.push(`date_joined = $${values.length}`);
+    }
+    if (Object.prototype.hasOwnProperty.call(req.body, "max_weekly_hours")) {
+      values.push(req.body.max_weekly_hours ?? null);
+      updates.push(`max_weekly_hours = $${values.length}`);
+    }
     if (updates.length === 0) {
-      throw new AppError(400, "VALIDATION_ERROR", "Provide full_name, employment_type, or status to update.");
+      throw new AppError(400, "VALIDATION_ERROR", "Provide full_name, employment_type, status, department, role, email, phone, date_joined, or max_weekly_hours to update.");
     }
 
     values.push(req.params.id);

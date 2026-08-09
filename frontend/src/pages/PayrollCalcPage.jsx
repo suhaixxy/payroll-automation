@@ -364,7 +364,7 @@ function PayrollCalcPage() {
   const totalPages = Math.max(1, Math.ceil(totalLines / LINES_PER_PAGE));
 
   return (
-    <div className="page">
+    <div className="page payroll-calculation-page">
       <div className="page-intro">
         <h2>Payroll Calculation</h2>
         <p className="muted">

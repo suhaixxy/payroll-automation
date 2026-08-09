@@ -1,8 +1,32 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
+import { GroupsRounded, PersonAddRounded, PersonOffRounded, WorkOutlineRounded } from "@mui/icons-material";
+import {
+  Alert,
+  Box,
+  Button,
+  Card,
+  CardContent,
+  Chip,
+  CircularProgress,
+  FormControl,
+  InputLabel,
+  MenuItem,
+  Select,
+  Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableHead,
+  TableRow,
+  TextField,
+  Typography,
+} from "@mui/material";
 import { createStaff, deactivateStaff, getStaff, updateStaff } from "../api/staff";
+import { PageHeader } from "../components/CommonComponents";
+import { formatStatus } from "../utils";
 import "../styles/rosterSync.css";
 
-const emptyStaff = { external_ref: "", full_name: "", employment_type: "part_time", status: "active" };
+const emptyStaff = { external_ref: "", full_name: "", employment_type: "part_time", department: "", role: "", email: "", phone: "", date_joined: "", max_weekly_hours: "", status: "active" };
 
 function StaffPage() {
   const [staff, setStaff] = useState([]);
@@ -13,7 +37,7 @@ function StaffPage() {
   const [errorMessage, setErrorMessage] = useState("");
   const [loading, setLoading] = useState(false);
 
-  const loadStaff = async () => {
+  const loadStaff = useCallback(async () => {
     setLoading(true);
     try {
       setStaff(await getStaff(statusFilter));
@@ -23,11 +47,11 @@ function StaffPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [statusFilter]);
 
   useEffect(() => {
     loadStaff();
-  }, [statusFilter]);
+  }, [loadStaff]);
 
   const updateForm = (event) => {
     const { name, value } = event.target;
@@ -47,6 +71,12 @@ function StaffPage() {
       external_ref: member.externalRef,
       full_name: member.fullName,
       employment_type: member.employmentType,
+      department: member.department || "",
+      role: member.role || "",
+      email: member.email || "",
+      phone: member.phone || "",
+      date_joined: member.dateJoined || "",
+      max_weekly_hours: member.maxWeeklyHours ?? "",
       status: member.status,
     });
     setShowForm(true);
@@ -67,6 +97,12 @@ function StaffPage() {
         await updateStaff(editingId, {
           full_name: form.full_name,
           employment_type: form.employment_type,
+          department: form.department,
+          role: form.role,
+          email: form.email,
+          phone: form.phone,
+          date_joined: form.date_joined,
+          max_weekly_hours: form.employment_type === "part_time" && form.max_weekly_hours !== "" ? Number(form.max_weekly_hours) : null,
           status: form.status,
         });
       } else {
@@ -74,6 +110,12 @@ function StaffPage() {
           external_ref: form.external_ref,
           full_name: form.full_name,
           employment_type: form.employment_type,
+          department: form.department,
+          role: form.role,
+          email: form.email,
+          phone: form.phone,
+          date_joined: form.date_joined,
+          max_weekly_hours: form.employment_type === "part_time" && form.max_weekly_hours !== "" ? Number(form.max_weekly_hours) : null,
         });
       }
       closeForm();
@@ -98,43 +140,134 @@ function StaffPage() {
   };
 
   return (
-    <main className="roster-page">
-      <header className="roster-intro"><h1>Staff</h1><p>Manage staff records used by roster synchronisation.</p></header>
-      <section className="roster-controls">
-        <label htmlFor="staff-status">Status</label>
-        <select id="staff-status" value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)} disabled={loading}>
-          <option value="">All staff</option>
-          <option value="active">Active only</option>
-        </select>
-        <button type="button" className="roster-primary" onClick={openAddForm} disabled={loading}>Add Staff</button>
-      </section>
-      {errorMessage && <p className="roster-banner roster-error">{errorMessage}</p>}
+    <Box className="page-enter content-page staff-page">
+      <PageHeader
+        title="Staff"
+        subtitle="Manage the people and employment details used by roster synchronisation."
+        actions={<Button variant="contained" startIcon={<PersonAddRounded />} onClick={openAddForm} disabled={loading}>Add Staff</Button>}
+      />
+
+      <Box className="staff-summary-grid" aria-label="Staff summary">
+        <Card className="staff-summary-card"><CardContent><Box className="staff-summary-icon"><GroupsRounded /></Box><Box><Typography className="staff-summary-label">Showing</Typography><Typography className="staff-summary-value">{staff.length}</Typography><Typography className="staff-summary-detail">{statusFilter ? "active staff members" : "staff records"}</Typography></Box></CardContent></Card>
+        <Card className="staff-summary-card"><CardContent><Box className="staff-summary-icon is-success"><WorkOutlineRounded /></Box><Box><Typography className="staff-summary-label">Active</Typography><Typography className="staff-summary-value">{staff.filter((member) => member.status === "active").length}</Typography><Typography className="staff-summary-detail">available for rostering</Typography></Box></CardContent></Card>
+        <Card className="staff-summary-card"><CardContent><Box className="staff-summary-icon is-muted"><PersonOffRounded /></Box><Box><Typography className="staff-summary-label">Inactive</Typography><Typography className="staff-summary-value">{staff.filter((member) => member.status !== "active").length}</Typography><Typography className="staff-summary-detail">not currently rostered</Typography></Box></CardContent></Card>
+      </Box>
+
+      <Card className="staff-filter-card">
+        <CardContent className="staff-filter-content">
+          <Box><Typography className="staff-filter-title">Directory view</Typography><Typography className="staff-filter-description">Filter the employee directory by employment status.</Typography></Box>
+          <FormControl size="small" className="staff-status-filter" sx={{ width: { xs: "100%", sm: 220 }, flexShrink: 0 }}>
+            <InputLabel id="staff-status-label">Status</InputLabel>
+            <Select labelId="staff-status-label" id="staff-status" label="Status" value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)} disabled={loading}>
+              <MenuItem value="">All staff</MenuItem>
+              <MenuItem value="active">Active only</MenuItem>
+            </Select>
+          </FormControl>
+        </CardContent>
+      </Card>
+
+      {errorMessage && <Alert severity="error" className="staff-alert">{errorMessage}</Alert>}
+
       {showForm && (
-        <section className="roster-card">
-          <h2>{editingId ? "Edit Staff" : "Add Staff"}</h2>
-          <form className="roster-controls" onSubmit={submitForm}>
-            <label htmlFor="staff-external-ref">External reference</label>
-            <input id="staff-external-ref" name="external_ref" value={form.external_ref} onChange={updateForm} disabled={Boolean(editingId) || loading} required />
-            <label htmlFor="staff-full-name">Name</label>
-            <input id="staff-full-name" name="full_name" value={form.full_name} onChange={updateForm} disabled={loading} required />
-            <label htmlFor="staff-employment-type">Employment type</label>
-            <select id="staff-employment-type" name="employment_type" value={form.employment_type} onChange={updateForm} disabled={loading}>
-              <option value="full_time">Full time</option>
-              <option value="part_time">Part time</option>
-            </select>
-            {editingId && <><label htmlFor="staff-status-edit">Status</label><select id="staff-status-edit" name="status" value={form.status} onChange={updateForm} disabled={loading}><option value="active">Active</option><option value="inactive">Inactive</option></select></>}
-            <button type="submit" className="roster-primary" disabled={loading}>{editingId ? "Save Changes" : "Create Staff"}</button>
-            <button type="button" className="roster-secondary" onClick={closeForm} disabled={loading}>Cancel</button>
-          </form>
-        </section>
+        <Card className="staff-form-card">
+          <CardContent>
+            <Typography component="h2">{editingId ? "Edit Staff" : "Add Staff"}</Typography>
+            <Box component="form" className="staff-form-grid" onSubmit={submitForm}>
+              <TextField size="small" label="External reference" id="staff-external-ref" name="external_ref" value={form.external_ref} onChange={updateForm} disabled={Boolean(editingId) || loading} required />
+              <TextField size="small" label="Name" id="staff-full-name" name="full_name" value={form.full_name} onChange={updateForm} disabled={loading} required />
+              <FormControl size="small">
+                <InputLabel id="staff-employment-type-label">Employment type</InputLabel>
+                <Select labelId="staff-employment-type-label" id="staff-employment-type" label="Employment type" name="employment_type" value={form.employment_type} onChange={updateForm} disabled={loading}>
+                  <MenuItem value="full_time">Full time</MenuItem>
+                  <MenuItem value="part_time">Part time</MenuItem>
+                </Select>
+              </FormControl>
+              <TextField size="small" label="Department" id="staff-department" name="department" value={form.department} onChange={updateForm} disabled={loading} />
+              <TextField size="small" label="Role" id="staff-role" name="role" value={form.role} onChange={updateForm} disabled={loading} />
+              <TextField size="small" label="Email" id="staff-email" name="email" value={form.email} onChange={updateForm} disabled={loading} />
+              <TextField size="small" label="Phone" id="staff-phone" name="phone" value={form.phone} onChange={updateForm} disabled={loading} />
+              <TextField size="small" label="Date joined" id="staff-date-joined" name="date_joined" type="date" value={form.date_joined} onChange={updateForm} disabled={loading} slotProps={{ inputLabel: { shrink: true } }} />
+              {form.employment_type === "part_time" && (
+                <TextField
+                  size="small"
+                  label="Weekly availability (hours)"
+                  helperText="Optional cap used when planning part-time shifts."
+                  id="staff-max-weekly-hours"
+                  name="max_weekly_hours"
+                  type="number"
+                  inputProps={{ min: 0, step: 0.5 }}
+                  value={form.max_weekly_hours}
+                  onChange={updateForm}
+                  disabled={loading}
+                />
+              )}
+              {editingId && (
+                <FormControl size="small">
+                  <InputLabel id="staff-status-edit-label">Status</InputLabel>
+                  <Select labelId="staff-status-edit-label" id="staff-status-edit" label="Status" name="status" value={form.status} onChange={updateForm} disabled={loading}>
+                    <MenuItem value="active">Active</MenuItem>
+                    <MenuItem value="inactive">Inactive</MenuItem>
+                  </Select>
+                </FormControl>
+              )}
+              <Box className="staff-form-actions">
+                <Button type="submit" variant="contained" disabled={loading}>{editingId ? "Save Changes" : "Create Staff"}</Button>
+                <Button type="button" variant="outlined" color="inherit" onClick={closeForm} disabled={loading}>Cancel</Button>
+              </Box>
+            </Box>
+          </CardContent>
+        </Card>
       )}
-      <section className="roster-card">
-        <h2>Staff Records</h2>
-        {loading && <p className="roster-empty">Loading staff...</p>}
-        {!loading && staff.length === 0 && <p className="roster-empty">No staff records found.</p>}
-        {!loading && staff.length > 0 && <div className="roster-table-scroll"><table><thead><tr><th>Name</th><th>Employment type</th><th>Status</th><th>Actions</th></tr></thead><tbody>{staff.map((member) => <tr key={member.id}><td>{member.fullName}</td><td>{member.employmentType.replace("_", " ")}</td><td>{member.status}</td><td><button type="button" className="roster-secondary" onClick={() => openEditForm(member)}>Edit</button>{member.status === "active" && <button type="button" className="roster-secondary" onClick={() => deactivate(member.id)}>Deactivate</button>}</td></tr>)}</tbody></table></div>}
-      </section>
-    </main>
+
+      <Card className="staff-table-card">
+        <Box className="staff-table-heading"><Box><Typography component="h2">Staff Directory</Typography><Typography className="staff-table-description">Employment details and roster availability.</Typography></Box><Chip size="small" label={`${staff.length} record${staff.length === 1 ? "" : "s"}`} variant="outlined" /></Box>
+        {loading && <Box className="staff-loading" role="status" aria-label="Loading staff"><CircularProgress /></Box>}
+        {!loading && staff.length === 0 && <Alert severity="info" className="staff-empty">No staff records found.</Alert>}
+        {!loading && staff.length > 0 && (
+          <TableContainer>
+            <Table aria-label="Staff records">
+              <TableHead>
+                <TableRow>
+                  <TableCell>Staff ID</TableCell>
+                  <TableCell>Name</TableCell>
+                  <TableCell>Employment Type</TableCell>
+                  <TableCell>Department</TableCell>
+                  <TableCell>Role</TableCell>
+                  <TableCell>Email</TableCell>
+                  <TableCell>Phone</TableCell>
+                  <TableCell>Date Joined</TableCell>
+                  <TableCell align="right">Weekly Availability</TableCell>
+                  <TableCell>Status</TableCell>
+                  <TableCell align="center">Actions</TableCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {staff.map((member) => (
+                  <TableRow key={member.id}>
+                    <TableCell><Typography className="staff-external-ref">{member.externalRef}</Typography></TableCell>
+                    <TableCell>{member.fullName}</TableCell>
+                    <TableCell>{formatStatus(member.employmentType)}</TableCell>
+                    <TableCell>{member.department || "—"}</TableCell>
+                    <TableCell>{member.role || "—"}</TableCell>
+                    <TableCell>{member.email || "—"}</TableCell>
+                    <TableCell>{member.phone || "—"}</TableCell>
+                    <TableCell>{member.dateJoined || "—"}</TableCell>
+                    <TableCell align="right">{member.employmentType === "part_time" && member.maxWeeklyHours != null ? `${member.maxWeeklyHours} hrs` : "—"}</TableCell>
+                    <TableCell><Chip size="small" color={member.status === "active" ? "success" : "default"} label={formatStatus(member.status)} /></TableCell>
+                    <TableCell align="center">
+                      <Box className="staff-row-actions">
+                        <Button size="small" variant="outlined" onClick={() => openEditForm(member)}>Edit</Button>
+                        {member.status === "active" && <Button size="small" variant="outlined" color="error" onClick={() => deactivate(member.id)}>Deactivate</Button>}
+                      </Box>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </TableContainer>
+        )}
+      </Card>
+    </Box>
   );
 }
 

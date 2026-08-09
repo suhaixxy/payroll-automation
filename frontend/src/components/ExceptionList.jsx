@@ -1,4 +1,6 @@
 import { useState } from "react";
+import { CheckCircleRounded, LinkRounded, SaveRounded, WarningAmberRounded } from "@mui/icons-material";
+import { Alert, Box, Button, Chip, FormControl, InputLabel, MenuItem, Select, TextField, Typography } from "@mui/material";
 import { resolveException } from "../api/roster";
 
 function ExceptionList({ items, variant = "unmatched", activeStaff = [], onResolved }) {
@@ -10,7 +12,7 @@ function ExceptionList({ items, variant = "unmatched", activeStaff = [], onResol
   const [successMessage, setSuccessMessage] = useState("");
 
   if (!items?.length) {
-    return <p className="roster-empty">{invalidTime ? "No data issues found." : "No unmatched entries found."}</p>;
+    return <Alert severity="info">{invalidTime ? "No data issues found." : "No unmatched entries found."}</Alert>;
   }
 
   const resolve = async (entry, resolution) => {
@@ -20,9 +22,9 @@ function ExceptionList({ items, variant = "unmatched", activeStaff = [], onResol
     try {
       await resolveException(entry.id, resolution);
       const staffName = activeStaff.find((staff) => staff.id === resolution.staffId)?.fullName;
-      setSuccessMessage(resolution.ignore ? "Entry ignored" : resolution.staffId ? `Linked to ${staffName || "staff member"}` : "Clock times saved");
-      await new Promise((resolveDelay) => setTimeout(resolveDelay, 1200));
-      await onResolved?.();
+      const message = resolution.ignore ? "Entry ignored" : resolution.staffId ? `Linked to ${staffName || "staff member"}` : "Clock times saved";
+      setSuccessMessage(message);
+      await onResolved?.(message);
     } catch (error) {
       setErrorMessage(error.message);
     } finally {
@@ -30,36 +32,85 @@ function ExceptionList({ items, variant = "unmatched", activeStaff = [], onResol
     }
   };
 
+  const confirmIgnore = (entry) => {
+    if (window.confirm("Ignore this entry? You can undo it later from the Resolved section below.")) resolve(entry, { ignore: true });
+  };
+
   return (
-    <ul className="roster-exception-list">
+    <Box className="roster-sync-exception-list">
       {items.map((entry, index) => {
-        const times = timeValues[entry.id] || { clockIn: "", clockOut: "" };
+        const times = timeValues[entry.id] || { clockIn: entry.clockIn || "", clockOut: entry.clockOut || "" };
         const isResolving = resolvingId === entry.id;
         return (
-          <li key={entry.id || `${entry.rosterRawName}-${entry.date}-${index}`} className={invalidTime ? "roster-critical" : "roster-unmatched"}>
-            <span>{invalidTime ? "Data issue" : "Unmatched"}</span>
-            <strong>{entry.rosterRawName}</strong>
-            <small>{entry.date}{invalidTime ? "" : ` · ${entry.hours}h`}</small>
-            {!invalidTime && <div className="roster-controls">
-              <select value={staffSelections[entry.id] || ""} onChange={(event) => setStaffSelections((current) => ({ ...current, [entry.id]: event.target.value }))} disabled={isResolving}>
-                <option value="">Select active staff</option>
-                {activeStaff.map((staff) => <option key={staff.id} value={staff.id}>{staff.fullName}</option>)}
-              </select>
-              <button type="button" className="roster-primary" onClick={() => resolve(entry, { staffId: staffSelections[entry.id] })} disabled={isResolving || !entry.id || !staffSelections[entry.id]}>Link</button>
-              <button type="button" className="roster-secondary" onClick={() => window.confirm("Permanently ignore this entry? This cannot be undone.") && resolve(entry, { ignore: true })} disabled={isResolving || !entry.id}>Ignore</button>
-            </div>}
-            {invalidTime && <div className="roster-controls">
-              <input type="time" value={times.clockIn} onChange={(event) => setTimeValues((current) => ({ ...current, [entry.id]: { ...times, clockIn: event.target.value } }))} disabled={isResolving} aria-label="Clock in" />
-              <input type="time" value={times.clockOut} onChange={(event) => setTimeValues((current) => ({ ...current, [entry.id]: { ...times, clockOut: event.target.value } }))} disabled={isResolving} aria-label="Clock out" />
-              <button type="button" className="roster-primary" onClick={() => resolve(entry, times)} disabled={isResolving || !entry.id || !times.clockIn || !times.clockOut}>Save</button>
-              <button type="button" className="roster-secondary" onClick={() => window.confirm("Permanently ignore this entry? This cannot be undone.") && resolve(entry, { ignore: true })} disabled={isResolving || !entry.id}>Ignore</button>
-            </div>}
-          </li>
+          <Box key={entry.id || `${entry.rosterRawName}-${entry.date}-${index}`} className="roster-sync-exception-row">
+            <Box className="roster-sync-exception-info">
+              <Chip size="small" color={invalidTime ? "error" : "warning"} icon={<WarningAmberRounded />} label={invalidTime ? "Data issue" : "Unmatched"} />
+              <Box>
+                <Typography className="roster-sync-exception-name">{entry.rosterRawName}</Typography>
+                <Typography className="roster-sync-exception-meta">{entry.date}{invalidTime ? "" : ` · ${entry.hours}h`}</Typography>
+              </Box>
+            </Box>
+
+            <Box className="roster-sync-exception-controls">
+              {!invalidTime && (
+                <FormControl size="small" className="roster-sync-exception-select" sx={{ minWidth: 200 }}>
+                  <InputLabel id={`link-staff-label-${entry.id}`}>Select active staff</InputLabel>
+                  <Select
+                    labelId={`link-staff-label-${entry.id}`}
+                    label="Select active staff"
+                    value={staffSelections[entry.id] || ""}
+                    onChange={(event) => setStaffSelections((current) => ({ ...current, [entry.id]: event.target.value }))}
+                    disabled={isResolving}
+                  >
+                    <MenuItem value=""><em>Select active staff</em></MenuItem>
+                    {activeStaff.map((staff) => <MenuItem key={staff.id} value={staff.id}>{staff.fullName}</MenuItem>)}
+                  </Select>
+                </FormControl>
+              )}
+              {invalidTime && (
+                <>
+                  <TextField
+                    size="small"
+                    type="time"
+                    label="Clock in"
+                    value={times.clockIn}
+                    onChange={(event) => setTimeValues((current) => ({ ...current, [entry.id]: { ...times, clockIn: event.target.value } }))}
+                    disabled={isResolving}
+                    slotProps={{ inputLabel: { shrink: true } }}
+                  />
+                  <TextField
+                    size="small"
+                    type="time"
+                    label="Clock out"
+                    value={times.clockOut}
+                    onChange={(event) => setTimeValues((current) => ({ ...current, [entry.id]: { ...times, clockOut: event.target.value } }))}
+                    disabled={isResolving}
+                    slotProps={{ inputLabel: { shrink: true } }}
+                  />
+                </>
+              )}
+              <Box className="roster-sync-exception-actions">
+                {!invalidTime && (
+                  <Button size="small" variant="contained" startIcon={<LinkRounded />} onClick={() => resolve(entry, { staffId: staffSelections[entry.id] })} disabled={isResolving || !entry.id || !staffSelections[entry.id]}>
+                    Link
+                  </Button>
+                )}
+                {invalidTime && (
+                  <Button size="small" variant="contained" startIcon={<SaveRounded />} onClick={() => resolve(entry, times)} disabled={isResolving || !entry.id || !times.clockIn || !times.clockOut}>
+                    Save
+                  </Button>
+                )}
+                <Button size="small" variant="outlined" color="inherit" onClick={() => confirmIgnore(entry)} disabled={isResolving || !entry.id}>
+                  Ignore
+                </Button>
+              </Box>
+            </Box>
+          </Box>
         );
       })}
-      {errorMessage && <li className="roster-critical"><small>{errorMessage}</small></li>}
-      {successMessage && <li className="roster-banner roster-info"><small>{successMessage}</small></li>}
-    </ul>
+      {errorMessage && <Alert severity="error">{errorMessage}</Alert>}
+      {successMessage && <Alert severity="success" icon={<CheckCircleRounded fontSize="inherit" />}>{successMessage}</Alert>}
+    </Box>
   );
 }
 
