@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { createStaff, deactivateStaff, getStaff, updateStaff } from "../api/staff";
 import "../styles/rosterSync.css";
 
-const emptyStaff = { external_ref: "", full_name: "", employment_type: "part_time", status: "active" };
+const emptyStaff = { external_ref: "", full_name: "", employment_type: "part_time", department: "", role: "", email: "", phone: "", date_joined: "", max_weekly_hours: "", status: "active" };
 
 function StaffPage() {
   const [staff, setStaff] = useState([]);
@@ -47,6 +47,12 @@ function StaffPage() {
       external_ref: member.externalRef,
       full_name: member.fullName,
       employment_type: member.employmentType,
+      department: member.department || "",
+      role: member.role || "",
+      email: member.email || "",
+      phone: member.phone || "",
+      date_joined: member.dateJoined || "",
+      max_weekly_hours: member.maxWeeklyHours ?? "",
       status: member.status,
     });
     setShowForm(true);
@@ -67,6 +73,12 @@ function StaffPage() {
         await updateStaff(editingId, {
           full_name: form.full_name,
           employment_type: form.employment_type,
+          department: form.department,
+          role: form.role,
+          email: form.email,
+          phone: form.phone,
+          date_joined: form.date_joined,
+          max_weekly_hours: form.max_weekly_hours,
           status: form.status,
         });
       } else {
@@ -74,6 +86,12 @@ function StaffPage() {
           external_ref: form.external_ref,
           full_name: form.full_name,
           employment_type: form.employment_type,
+          department: form.department,
+          role: form.role,
+          email: form.email,
+          phone: form.phone,
+          date_joined: form.date_joined,
+          max_weekly_hours: form.max_weekly_hours,
         });
       }
       closeForm();
@@ -122,6 +140,18 @@ function StaffPage() {
               <option value="full_time">Full time</option>
               <option value="part_time">Part time</option>
             </select>
+            <label htmlFor="staff-department">Department</label>
+            <input id="staff-department" name="department" value={form.department} onChange={updateForm} disabled={loading} />
+            <label htmlFor="staff-role">Role</label>
+            <input id="staff-role" name="role" value={form.role} onChange={updateForm} disabled={loading} />
+            <label htmlFor="staff-email">Email</label>
+            <input id="staff-email" name="email" value={form.email} onChange={updateForm} disabled={loading} />
+            <label htmlFor="staff-phone">Phone</label>
+            <input id="staff-phone" name="phone" value={form.phone} onChange={updateForm} disabled={loading} />
+            <label htmlFor="staff-date-joined">Date joined</label>
+            <input id="staff-date-joined" name="date_joined" type="date" value={form.date_joined} onChange={updateForm} disabled={loading} />
+            <label htmlFor="staff-max-weekly-hours">Max weekly hours</label>
+            <input id="staff-max-weekly-hours" name="max_weekly_hours" type="number" value={form.max_weekly_hours} onChange={updateForm} disabled={loading} />
             {editingId && <><label htmlFor="staff-status-edit">Status</label><select id="staff-status-edit" name="status" value={form.status} onChange={updateForm} disabled={loading}><option value="active">Active</option><option value="inactive">Inactive</option></select></>}
             <button type="submit" className="roster-primary" disabled={loading}>{editingId ? "Save Changes" : "Create Staff"}</button>
             <button type="button" className="roster-secondary" onClick={closeForm} disabled={loading}>Cancel</button>
@@ -132,7 +162,7 @@ function StaffPage() {
         <h2>Staff Records</h2>
         {loading && <p className="roster-empty">Loading staff...</p>}
         {!loading && staff.length === 0 && <p className="roster-empty">No staff records found.</p>}
-        {!loading && staff.length > 0 && <div className="roster-table-scroll"><table><thead><tr><th>Name</th><th>Employment type</th><th>Status</th><th>Actions</th></tr></thead><tbody>{staff.map((member) => <tr key={member.id}><td>{member.fullName}</td><td>{member.employmentType.replace("_", " ")}</td><td>{member.status}</td><td><button type="button" className="roster-secondary" onClick={() => openEditForm(member)}>Edit</button>{member.status === "active" && <button type="button" className="roster-secondary" onClick={() => deactivate(member.id)}>Deactivate</button>}</td></tr>)}</tbody></table></div>}
+        {!loading && staff.length > 0 && <div className="roster-table-scroll"><table><thead><tr><th>Name</th><th>Employment type</th><th>Department</th><th>Role</th><th>Email</th><th>Phone</th><th>Date joined</th><th>Max weekly hours</th><th>Status</th><th>Actions</th></tr></thead><tbody>{staff.map((member) => <tr key={member.id}><td>{member.fullName}</td><td>{member.employmentType.replace("_", " ")}</td><td>{member.department || "—"}</td><td>{member.role || "—"}</td><td>{member.email || "—"}</td><td>{member.phone || "—"}</td><td>{member.dateJoined || "—"}</td><td>{member.maxWeeklyHours ?? "—"}</td><td>{member.status}</td><td><button type="button" className="roster-secondary" onClick={() => openEditForm(member)}>Edit</button>{member.status === "active" && <button type="button" className="roster-secondary" onClick={() => deactivate(member.id)}>Deactivate</button>}</td></tr>)}</tbody></table></div>}
       </section>
     </main>
   );
