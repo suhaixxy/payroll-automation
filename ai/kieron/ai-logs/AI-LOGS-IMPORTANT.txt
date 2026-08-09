@@ -1,0 +1,14 @@
+IMPORTANT – AI LOGS
+
+The assignment guide asks for genuine Claude Code .jsonl logs showing the phase, prompt, AI output, and whether the output was accepted, edited, or rejected.
+
+No fake .jsonl file is included in this draft pack.
+
+You said you used Claude on the web through a shared school account and no longer have access yourself. A fabricated file should not be presented as a Claude Code export.
+
+Recommended next step:
+1. Ask a teammate who still has access to the shared account to recover your relevant conversations/evidence.
+2. Ask your tutor whether web-Claude history or another clearly labelled AI record is acceptable in place of Claude Code .jsonl logs.
+3. If the tutor permits a reconstructed log, label it explicitly as reconstructed rather than exported from Claude Code.
+
+Delete this note from the final submission if your tutor does not require it.
