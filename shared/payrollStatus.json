@@ -1,0 +1,26 @@
+{
+  "_doc": [
+    "Payment generation and HRMS synchronization are payment_batch states.",
+    "A period remains approved until successful payment, then becomes paid.",
+    "Shared pay-period status contract (UC-003 guide §5.1) — the ONE place",
+    "the status strings live. Backend: require('../../shared/payrollStatus.json');",
+    "frontend: import payrollStatus from '../../shared/payrollStatus.json'.",
+    "JSON so Node, Jest and Vite all load the same file with zero tooling.",
+    "Lifecycle: draft → validated → calculated → pending_approval → approved → paid.",
+    "UC-003 owns exactly two transitions: validated→calculated (a run completes)",
+    "and calculated→pending_approval (manager submits). UC-003 must never write",
+    "'approved' or 'paid'. Once a period is in a status listed in uc003Locked,",
+    "UC-003 data (adjustments, performance inputs) is locked and recalculation",
+    "is refused with 409."
+  ],
+  "statuses": {
+    "DRAFT": "draft",
+    "VALIDATED": "validated",
+    "CALCULATED": "calculated",
+    "PENDING_APPROVAL": "pending_approval",
+    "APPROVED": "approved",
+    "PAID": "paid"
+  },
+  "order": ["draft", "validated", "calculated", "pending_approval", "approved", "paid"],
+  "uc003Locked": ["approved", "paid"]
+}

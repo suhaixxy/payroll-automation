@@ -1,0 +1,601 @@
+/* 1. Global and reset styles */
+:root {
+  font-family: Inter, "Segoe UI", Roboto, Arial, sans-serif;
+  color: #181818;
+  background: #f7f7f8;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  --primary: #7a0000;
+  --primary-light: #990000;
+  --primary-dark: #5f0000;
+  --accent: #990000;
+  --app-background: #f7f7f8;
+  --sidebar: #111111;
+  --sidebar-hover: #202020;
+  --surface: #ffffff;
+  --border: #e5e7eb;
+  --text-main: #181818;
+  --text-secondary: #666666;
+}
+
+* { box-sizing: border-box; }
+html { min-width: 320px; background: var(--app-background); }
+body { margin: 0; min-width: 320px; min-height: 100vh; }
+button, input { font: inherit; }
+a { color: inherit; }
+#root { min-height: 100vh; }
+
+/* Keep legacy element styles from distorting Material UI's icon-only controls.
+   IconButton renders as a native button, so it needs an explicit reset. */
+button.MuiIconButton-root {
+  min-height: 0;
+  padding: 8px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font-size: inherit;
+}
+button.MuiIconButton-root:hover:not(:disabled) { border-color: transparent; color: inherit; }
+
+.page-enter { animation: page-enter 180ms ease-out; }
+
+@keyframes page-enter {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+:focus-visible { outline: 3px solid rgba(122, 0, 0, 0.24); outline-offset: 2px; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
+}
+
+/* 2. Application layout */
+.application-shell { min-height: 100vh; background: var(--app-background); }
+.MuiDrawer-paper { border: 0 !important; background: var(--sidebar) !important; color: #fff !important; }
+.application-main { min-width: 0; margin-left: 270px; padding: 108px 32px 40px; min-height: 100vh; overflow-x: hidden; transition: margin-left 180ms ease; }
+.application-shell.sidebar-collapsed .application-main { margin-left: 0; }
+
+/* 3. Sidebar and top bar */
+.sidebar-content { height: 100%; min-height: 100vh; display: flex; flex-direction: column; background: #111; }
+.brand-lockup { min-height: 124px; padding: 26px 30px 22px; display: flex; flex-direction: column; justify-content: center; background: #7a0000; }
+.brand-name { color: #fff; font-size: 2.25rem !important; font-weight: 800 !important; line-height: 1 !important; letter-spacing: -.035em !important; }
+.brand-subtitle { margin-top: 9px !important; color: rgba(255,255,255,.88); font-size: .78rem !important; font-weight: 600 !important; }
+.sidebar-divider { border-color: rgba(255,255,255,.12) !important; }
+.sidebar-nav { padding: 22px 16px 12px !important; }
+.sidebar-link { min-height: 49px; margin: 3px 0 !important; padding-inline: 15px !important; border-radius: 8px !important; color: #e8e8e8 !important; transition: background-color 150ms ease, color 150ms ease !important; }
+.sidebar-link .MuiListItemIcon-root { color: #d5d5d5; min-width: 40px; }
+.sidebar-link .MuiListItemText-primary { font-size: .9rem; font-weight: 600; }
+.sidebar-link:hover { background: var(--sidebar-hover) !important; }
+.sidebar-link-active:not(.sidebar-sublink) { background: #7a0000 !important; color: #fff !important; }
+.sidebar-link-active .MuiListItemIcon-root { color: #fff; }
+.sidebar-link-unavailable.Mui-disabled { opacity: .56; color: #d8d8d8 !important; }
+.sidebar-link-unavailable .MuiListItemText-secondary { color: #929292; font-size: .65rem; }
+.sidebar-parent-active { background: rgba(255,255,255,.055) !important; }
+.sidebar-submenu { position: relative; margin: 1px 0 8px; padding: 3px 0 3px 16px !important; }
+.sidebar-submenu::before { content: ""; position: absolute; top: 4px; bottom: 4px; left: 9px; width: 1px; background: rgba(255,255,255,.11); }
+.sidebar-sublink { min-height: 42px; padding-left: 22px !important; }
+.sidebar-sublink .MuiListItemIcon-root { min-width: 33px; }
+.sidebar-sublink .MuiSvgIcon-root { font-size: 1.1rem; }
+.sidebar-sublink.sidebar-link-active { position: relative; background: rgba(122,0,0,.1) !important; color: #ff4949 !important; }
+.sidebar-sublink.sidebar-link-active::before { content: ""; position: absolute; left: -7px; top: 7px; bottom: 7px; width: 2px; border-radius: 2px; background: #d22323; }
+.sidebar-sublink.sidebar-link-active .MuiListItemIcon-root { color: #ef3333; }
+.sidebar-logout { margin-top: auto; padding: 14px 16px 24px; }
+.app-topbar { left: 270px !important; width: calc(100% - 270px) !important; border-bottom: 1px solid var(--border); background: rgba(255,255,255,.94) !important; backdrop-filter: blur(12px); }
+.application-shell.sidebar-collapsed .app-topbar { left: 0 !important; width: 100% !important; }
+.app-topbar .MuiToolbar-root { min-height: 82px; padding-inline: 28px; }
+.topbar-menu-button { margin-right: 24px !important; color: #181818 !important; }
+.topbar-page-title { flex-grow: 1; color: #7a0000; font-size: 1.18rem !important; font-weight: 700 !important; }
+.topbar-account { display: flex; align-items: center; gap: 3px; }
+.topbar-account > .MuiIconButton-root { flex: 0 0 auto; }
+.topbar-avatar { width: 38px !important; height: 38px !important; background-color: #7a0000 !important; font-size: .8rem !important; font-weight: 700; }
+.topbar-user-copy { min-width: 112px; margin-left: 5px; }
+.topbar-user-copy .MuiTypography-root { line-height: 1.3; }
+.topbar-account-arrow { margin-left: 3px !important; color: #181818 !important; }
+
+/* 4. Login page */
+.login-page { min-height: 100vh; overflow: hidden; display: grid; grid-template-columns: minmax(500px, 1.04fr) minmax(500px, .96fr); background: #f7f7f8; }
+.login-brand-panel { position: relative; isolation: isolate; min-height: 100vh; overflow: hidden; display: flex; flex-direction: column; padding: clamp(54px, 6.7vw, 104px) clamp(54px, 7.5vw, 118px) 60px; color: #fff; background: radial-gradient(circle at 58% 43%, rgba(191,18,18,.26), transparent 29%), linear-gradient(138deg, #560000 0%, #820000 49%, #520000 100%); }
+.login-brand-content { position: relative; z-index: 3; margin-block: auto; transform: translateY(-3vh); }
+.login-eyebrow { color: #fff; font-size: clamp(.72rem, 1.15vw, 1rem) !important; font-weight: 750 !important; letter-spacing: .28em !important; }
+.login-accent-line { width: 122px; height: 3px; margin: 27px 0 23px; background: linear-gradient(90deg, #ff7777 0 72%, rgba(255,119,119,.32) 72% 86%, rgba(255,119,119,.13) 86%); }
+.login-hero-title { font-size: clamp(3rem, 4.7vw, 4.75rem) !important; font-weight: 750 !important; line-height: 1.12 !important; letter-spacing: -.045em !important; }
+.login-hero-copy { margin-top: 23px !important; color: rgba(255,255,255,.93); font-size: clamp(1rem, 1.35vw, 1.32rem) !important; line-height: 1.48 !important; }
+.login-footer { position: relative; z-index: 4; font-size: .87rem; line-height: 1.7; }
+.login-footer .MuiTypography-root { font-size: inherit; }
+.login-circle-lines { position: absolute; z-index: 1; width: 360px; height: 360px; top: -210px; left: -188px; border: 1px solid rgba(255,106,106,.22); border-radius: 50%; box-shadow: 0 0 0 48px rgba(255,255,255,0), 0 0 0 49px rgba(255,106,106,.17), 0 0 0 95px rgba(255,255,255,0), 0 0 0 96px rgba(255,106,106,.13); }
+.login-panel-orb { position: absolute; z-index: 1; width: 340px; height: 340px; top: -55px; right: -108px; border-radius: 50%; background: rgba(177,22,22,.24); box-shadow: inset 0 0 80px rgba(118,0,0,.16); }
+.login-dot-grid { width: 92px; height: 92px; background-image: radial-gradient(circle, currentColor 3px, transparent 3.5px); background-size: 28px 28px; }
+.login-dot-grid-brand { position: absolute; z-index: 2; top: 36px; right: 50px; color: rgba(255,105,105,.67); }
+.login-wave { position: absolute; z-index: 2; left: -12%; right: -12%; bottom: -7%; height: 25%; transform: rotate(-2deg); }
+.login-wave span { position: absolute; left: -5%; width: 110%; height: 52%; border-top: 1px solid rgba(255,48,48,.52); border-radius: 50%; transform: rotate(calc((var(--wave-index, 0)) * .25deg)); }
+.login-wave span:nth-child(1) { top: 0; }
+.login-wave span:nth-child(2) { top: 7px; }
+.login-wave span:nth-child(3) { top: 14px; }
+.login-wave span:nth-child(4) { top: 21px; }
+.login-wave span:nth-child(5) { top: 28px; }
+.login-wave span:nth-child(6) { top: 35px; }
+.login-wave span:nth-child(7) { top: 42px; }
+.login-wave span:nth-child(8) { top: 49px; }
+.login-wave span:nth-child(9) { top: 56px; }
+.login-wave span:nth-child(10) { top: 63px; }
+.login-wave span:nth-child(11) { top: 70px; }
+.login-wave span:nth-child(12) { top: 77px; }
+.login-form-panel { position: relative; min-height: 100vh; display: grid; place-items: center; padding: clamp(42px, 7vw, 110px); background: radial-gradient(circle at 90% 92%, rgba(122,0,0,.025), transparent 25%), #fdfdfd; }
+.login-form-wrap { width: min(100%, 575px); }
+.login-form-heading { margin: 0 0 58px 34px; }
+.login-form-heading h2 { color: #7a0000; font-size: clamp(2.8rem, 4.2vw, 4rem); font-weight: 750; line-height: 1.05; letter-spacing: -.045em; }
+.login-form-heading p { margin-top: 14px; color: #313743; font-size: 1.05rem; }
+.login-card { width: 100%; border: 0 !important; border-radius: 16px !important; box-shadow: 0 12px 38px rgba(24,24,24,.09) !important; }
+.login-card-content { padding: clamp(30px, 3.8vw, 46px) !important; }
+.login-field-group + .login-field-group { margin-top: 28px; }
+.login-field-label { color: #252a34; font-size: .97rem !important; font-weight: 700 !important; }
+.login-field-label span { color: #d10b0b; margin-left: 2px; }
+.login-card .MuiOutlinedInput-root { min-height: 66px; border-radius: 34px; padding-inline: 17px; }
+.login-card .MuiOutlinedInput-notchedOutline { border-color: #d7d9dd; }
+.login-card .MuiInputBase-input { padding-block: 17px; font-size: 1rem; }
+.login-card .MuiInputBase-input::placeholder { color: #7b8190; opacity: .72; }
+.login-card .MuiInputAdornment-root { color: #27303d; }
+#login-password::-ms-reveal,
+#login-password::-ms-clear { display: none; }
+.login-card .MuiFormHelperText-root { margin-left: 20px; }
+.login-submit { min-height: 65px !important; margin-top: 36px !important; border-radius: 13px !important; gap: 9px; font-size: 1rem !important; font-weight: 750 !important; letter-spacing: .015em !important; background: linear-gradient(100deg, #8a0000, #730000) !important; box-shadow: 0 7px 18px rgba(122,0,0,.18) !important; }
+.login-submit:hover { background: #990000 !important; }
+.login-dot-grid-form { position: absolute; right: 38px; bottom: 40px; color: rgba(122,0,0,.055); }
+
+/* 5. Page headings, cards, tables, payment and payslip details */
+.content-page { width: 100%; max-width: 1440px; margin: 0 auto; }
+.filter-row { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; }
+.mono-id { display: inline-block; max-width: 150px; overflow: hidden; text-overflow: ellipsis; vertical-align: bottom; font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: .78rem; }
+.dialog-summary-grid, .detail-grid { display: grid; grid-template-columns: minmax(130px, .55fr) minmax(180px, 1fr); gap: 12px 20px; align-items: baseline; }
+.detail-grid.compact { margin-top: 22px; }
+.payslip-value-row { display: flex; justify-content: space-between; gap: 24px; padding: 13px 0; border-bottom: 1px solid var(--border); }
+.profile-details { display: grid; grid-template-columns: 28px 1fr; gap: 22px 12px; margin-top: 36px; align-items: center; }
+.MuiTableContainer-root { overflow-x: auto; }
+.MuiTableCell-root { white-space: nowrap; }
+
+/* 6. Dashboard */
+.dashboard-page .MuiTypography-h1 { color: #7a0000; }
+.dashboard-summary-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 18px; }
+.dashboard-summary-card { min-width: 0; min-height: 162px; box-shadow: 0 5px 18px rgba(24,24,24,.05) !important; }
+.dashboard-summary-card .MuiCardContent-root { height: 100%; display: flex; gap: 17px; padding: 25px !important; }
+.dashboard-summary-icon, .dashboard-action-icon, .dashboard-status-icon { flex: 0 0 auto; display: grid; place-items: center; color: #9b0909; background: #fde9e9; }
+.dashboard-summary-icon { width: 50px; height: 50px; border-radius: 50%; }
+.dashboard-summary-icon svg { font-size: 1.75rem; }
+.dashboard-summary-copy { min-width: 0; flex: 1; }
+.dashboard-summary-label { color: #3d3d3d; font-weight: 650 !important; }
+.dashboard-summary-value { margin-top: 7px !important; color: #181818; font-size: 1.8rem !important; font-weight: 750 !important; line-height: 1.2 !important; }
+.dashboard-summary-card-pay-period .dashboard-summary-value { max-width: 100%; min-width: 0; font-size: clamp(1rem, 1.15vw, 1.16rem) !important; line-height: 1.3 !important; white-space: normal; overflow-wrap: normal; }
+.dashboard-period-range { display: flex; flex-wrap: wrap; align-items: baseline; column-gap: .25rem; }
+.dashboard-period-range span { white-space: nowrap; }
+.dashboard-summary-description { display: block; margin-top: 9px !important; color: #666; font-size: .75rem !important; }
+.dashboard-period-chip { margin-top: 9px; }
+.dashboard-section-card { margin-top: 18px; padding: 0 18px 18px; box-shadow: 0 5px 18px rgba(24,24,24,.045) !important; }
+.dashboard-section-heading { min-height: 70px; display: flex; align-items: center; justify-content: space-between; gap: 20px; padding: 0 3px; }
+.dashboard-section-heading h2 { font-size: 1.08rem; font-weight: 700; }
+.dashboard-view-all { display: inline-flex; align-items: center; gap: 9px; padding: 8px; border: 0; border-radius: 7px; color: #7a0000; background: transparent; font: inherit; font-size: .78rem; font-weight: 700; cursor: pointer; }
+.dashboard-view-all:hover { background: rgba(122,0,0,.06); }
+.dashboard-view-all svg { font-size: .75rem; }
+.dashboard-batches-card .MuiTableContainer-root { border: 1px solid #ededed; border-radius: 9px; }
+.dashboard-batches-card .MuiTableHead-root { background: #fafafa; }
+.dashboard-batches-card .MuiTableCell-root { padding: 13px 14px; font-size: .78rem; }
+.dashboard-batch-reference { font-weight: 700 !important; }
+.dashboard-empty-row { height: 110px; color: #666 !important; }
+.dashboard-lower-grid { display: grid; grid-template-columns: 1.08fr 1fr; gap: 18px; }
+.dashboard-actions-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
+.dashboard-action { display: block; min-height: 176px; padding: 20px 15px; border: 1px solid #e6e6e6; border-radius: 9px; text-align: left; color: #181818; background: #fff; cursor: pointer; transition: border-color 150ms ease, background-color 150ms ease, transform 150ms ease; }
+.dashboard-action:hover { border-color: rgba(122,0,0,.35); background: #fffafa; transform: translateY(-1px); }
+.dashboard-action-icon { width: 45px; height: 45px; border-radius: 8px; }
+.dashboard-action-title { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 16px; }
+.dashboard-action-title .MuiTypography-root { font-size: .82rem; font-weight: 700; }
+.dashboard-action-title svg { font-size: .75rem; }
+.dashboard-action > .MuiTypography-root { margin-top: 11px; color: #555; font-size: .75rem; line-height: 1.7; }
+.dashboard-status-list { overflow: hidden; border: 1px solid #e6e6e6; border-radius: 9px; }
+.dashboard-status-row { min-height: 48px; display: flex; align-items: center; justify-content: space-between; gap: 20px; padding: 7px 12px; border-bottom: 1px solid #e6e6e6; }
+.dashboard-status-row:last-child { border-bottom: 0; }
+.dashboard-status-row > .MuiTypography-root { font-size: .76rem; font-weight: 650; text-align: right; }
+.dashboard-status-label { min-width: 0; display: flex; align-items: center; gap: 12px; }
+.dashboard-status-label > .MuiTypography-root { font-size: .79rem; font-weight: 650; }
+.dashboard-status-icon { width: 34px; height: 34px; border-radius: 50%; }
+.dashboard-status-icon svg { font-size: 1.05rem; }
+.dashboard-connection { display: flex; align-items: center; gap: 8px; font-size: .76rem; font-weight: 700; white-space: nowrap; }
+.dashboard-connection span { width: 8px; height: 8px; border-radius: 50%; background: #888; }
+.dashboard-connection.is-connected span { background: #208b43; }
+
+/* 7. Payment preview and employee review */
+.payment-preview-page .MuiTypography-h1 { color: #7a0000; }
+.payment-preview-period-card { margin-bottom: 16px; box-shadow: none !important; }
+.payment-preview-period-card .MuiCardContent-root { padding: 15px !important; }
+.payment-preview-loading { min-height: 180px; display: grid; place-items: center; }
+.payment-preview-empty-card { margin-top: 16px; text-align: center; box-shadow: 0 4px 16px rgba(24,24,24,.045) !important; }
+.payment-preview-empty-action { display: flex; justify-content: center; margin: -34px 0 28px; }
+.payment-validation-alert { margin-bottom: 16px; border: 1px solid #f3d7ae; background: #fff9ef !important; }
+.payment-validation-alert .MuiAlert-message { flex: 1; display: grid; gap: 3px; }
+.payment-preview-metrics { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; }
+.payment-preview-metric { min-width: 0; min-height: 130px; box-shadow: 0 4px 15px rgba(24,24,24,.04) !important; }
+.payment-preview-metric .MuiCardContent-root { display: flex; align-items: flex-start; gap: 16px; padding: 20px !important; }
+.payment-preview-metric-icon { flex: 0 0 auto; width: 48px; height: 48px; display: grid; place-items: center; border-radius: 50%; color: #a20a0a; background: #fde7e7; }
+.payment-preview-metric-icon svg { font-size: 1.65rem; }
+.payment-preview-metric.is-success .payment-preview-metric-icon { color: #20843d; background: #e2f5e7; }
+.payment-preview-metric.is-error .payment-preview-metric-icon { color: #c62828; background: #fde7e7; }
+.payment-preview-metric-label { color: #3f3f3f; font-size: .8rem !important; }
+.payment-preview-metric-value { margin-top: 4px !important; font-size: 1.65rem !important; font-weight: 750 !important; line-height: 1.2 !important; overflow-wrap: anywhere; }
+.payment-preview-metric-description { margin-top: 8px !important; color: #666; font-size: .7rem !important; }
+.payment-preview-metric.is-success .payment-preview-metric-description { color: #247a38; }
+.payment-preview-metric.is-error .payment-preview-metric-description { color: #a71919; }
+.payment-preview-workspace { display: grid; grid-template-columns: minmax(0, 2.2fr) minmax(285px, .95fr); align-items: start; gap: 16px; margin-top: 16px; }
+.payment-preview-table-card, .payment-preview-side-card, .review-employees-table-card { box-shadow: 0 4px 16px rgba(24,24,24,.045) !important; }
+.payment-preview-card-heading { min-height: 66px; display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 12px 18px; }
+.payment-preview-card-heading h2, .payment-preview-side-card h2, .review-table-title h2 { font-size: .98rem; font-weight: 700; }
+.payment-preview-filters { display: flex; gap: 10px; }
+.payment-preview-filters .MuiTextField-root { min-width: 210px; }
+.payment-preview-filters .MuiFormControl-root { min-width: 145px; }
+.payment-preview-table-card .MuiTableContainer-root, .review-employees-table-card .MuiTableContainer-root { max-width: 100%; overflow-x: auto; }
+.payment-preview-table-card .MuiTable-root { min-width: 1080px; }
+.payment-preview-table-card .MuiTableCell-root, .review-employees-table-card .MuiTableCell-root { padding: 11px 10px; font-size: .72rem; }
+.payment-employee-cell { display: flex; align-items: center; gap: 10px; min-width: 145px; }
+.payment-employee-cell .MuiAvatar-root { width: 34px; height: 34px; color: #9d0b0b; background: #fde4e4; font-size: .7rem; font-weight: 700; }
+.payment-employee-cell .MuiTypography-root:first-child { color: #181818; font-size: .75rem; font-weight: 700; }
+.payment-employee-cell .MuiTypography-root:last-child { color: #666; font-size: .66rem; }
+.payment-bank-cell .MuiTypography-root:first-child { font-size: .73rem; font-weight: 700; }
+.payment-bank-cell .MuiTypography-root:last-child { margin-top: 2px; color: #666; font-size: .64rem; }
+.payment-bank-cell.is-missing .MuiTypography-root, .payment-bank-cell.is-invalid .MuiTypography-root { color: #b51d1d; }
+.payment-preview-side { display: grid; gap: 16px; }
+.payment-preview-side-card .MuiCardContent-root { padding: 18px !important; }
+.payment-summary-list { display: grid; margin-top: 18px; }
+.payment-summary-list > div { display: flex; justify-content: space-between; gap: 16px; padding: 9px 0; font-size: .76rem; }
+.payment-summary-list strong { text-align: right; }
+.payment-summary-net { margin: 5px 0; padding-block: 15px !important; border-block: 1px solid #e6e6e6; font-size: .88rem !important; font-weight: 700; }
+.payment-summary-net strong { color: #a20a0a; font-size: 1.15rem; }
+.payment-summary-list .is-success { color: #20843d; }
+.payment-summary-list .is-error { color: #c62828; }
+.payment-preview-side-title { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.payment-attention-list { display: grid; gap: 12px; margin-top: 17px; }
+.payment-attention-item { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 10px; }
+.payment-attention-item .MuiAvatar-root { width: 31px; height: 31px; color: #a20a0a; background: #fde4e4; font-size: .65rem; }
+.payment-attention-item .MuiTypography-root:first-child { font-size: .72rem; font-weight: 700; }
+.payment-attention-item .MuiTypography-root:first-child span { color: #555; font-weight: 500; }
+.payment-attention-item .MuiTypography-root:last-child { margin-top: 2px; color: #666; font-size: .64rem; }
+.payment-attention-item .MuiButton-root { min-width: 105px; padding-inline: 8px; font-size: .65rem; }
+.payment-view-all { display: flex !important; margin: 18px 0 0 auto !important; }
+.review-employees-heading { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; }
+.review-employees-heading h1 { color: #7a0000; font-size: 1.65rem; font-weight: 700; }
+.review-employees-subtitle { margin-top: 14px !important; color: #555; }
+.review-employees-toolbar { display: flex; align-items: flex-end; justify-content: space-between; gap: 24px; margin-top: 24px; border-bottom: 1px solid #e6e6e6; }
+.review-employees-toolbar .MuiTextField-root { width: min(100%, 285px); margin-bottom: 9px; }
+.review-employees-toolbar .MuiTabs-root { min-width: 0; }
+.review-employees-toolbar .MuiTab-root { min-height: 54px; font-weight: 650; text-transform: none; }
+.review-employees-warning { margin-top: 18px; border: 1px solid #f3d7ae; background: #fff9ef !important; }
+.review-employees-warning .MuiAlert-message { display: grid; gap: 6px; }
+.review-employees-table-card { margin-top: 18px; overflow: hidden; }
+.review-table-title { padding: 19px 16px; border-bottom: 1px solid #e6e6e6; color: #7a0000; }
+.review-employees-table-card .MuiTable-root { min-width: 930px; }
+.review-pagination { min-height: 68px; display: flex; align-items: center; justify-content: space-between; gap: 18px; padding: 12px 16px; border-top: 1px solid #e6e6e6; }
+.review-pagination > .MuiTypography-root { color: #555; font-size: .77rem; }
+.review-pagination > div { display: flex; align-items: center; gap: 9px; }
+.review-pagination > div > .MuiTypography-root { min-width: 34px; text-align: center; font-weight: 700; }
+.review-employees-info { margin-top: 18px; border: 1px solid #cfe4f3; background: #f6fbff !important; }
+.review-employees-info .MuiAlert-message { display: grid; gap: 8px; }
+
+/* 8. Payment batches */
+.payment-batches-page {
+  --payment-ready-border: #eadff7;
+  --payment-ready-surface: #faf6ff;
+  --payment-ready-text: #7444c3;
+  --payment-ready-icon-surface: #eee2ff;
+}
+.payment-batches-page .MuiTypography-h1 { color: #7a0000; }
+.payment-batch-filter-card .MuiCardContent-root { padding: 20px !important; }
+.payment-batch-filters { display: grid; grid-template-columns: minmax(220px, 1.5fr) repeat(4, minmax(145px, 1fr)) auto; align-items: end; gap: 16px; }
+.payment-batch-filters > div:not(.MuiIconButton-root) { min-width: 0; }
+.payment-batch-filters > div > .MuiTypography-root { margin-bottom: 8px; font-size: .73rem; font-weight: 700; }
+.payment-batch-filters .MuiTextField-root, .payment-batch-filters .MuiFormControl-root { width: 100%; }
+.payment-batch-summaries { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 14px; margin-top: 22px; }
+.payment-batch-summary { min-width: 0; min-height: 84px; display: flex; align-items: center; gap: 13px; padding: 14px; border: 1px solid #e5edf7; border-radius: 9px; background: #f5f9ff; }
+.payment-batch-summary > div:first-child { flex: 0 0 auto; width: 43px; height: 43px; display: grid; place-items: center; border-radius: 50%; color: #2570c8; background: #e3efff; }
+.payment-batch-summary > div:last-child .MuiTypography-root:first-child { font-size: 1.25rem; font-weight: 750; }
+.payment-batch-summary > div:last-child .MuiTypography-root:last-child { margin-top: 2px; font-size: .7rem; }
+.payment-batch-summary.is-pending { border-color: #f4e3cb; background: #fff9f1; }
+.payment-batch-summary.is-pending > div:first-child { color: #dc7800; background: #fff0d9; }
+.payment-batch-summary.is-ready { border-color: var(--payment-ready-border); background: var(--payment-ready-surface); }
+.payment-batch-summary.is-ready > div:first-child { color: var(--payment-ready-text); background: var(--payment-ready-icon-surface); }
+.payment-ready-chip.MuiChip-root { color: var(--payment-ready-text); background: var(--payment-ready-icon-surface); }
+.payment-batch-summary.is-completed { border-color: #dbeee0; background: #f4fbf6; }
+.payment-batch-summary.is-completed > div:first-child { color: #218844; background: #dff3e5; }
+.payment-batch-summary.is-failed { border-color: #f5dce0; background: #fff5f6; }
+.payment-batch-summary.is-failed > div:first-child { color: #c62828; background: #fde2e4; }
+.payment-batch-table-card { margin-top: 18px; overflow: hidden; box-shadow: 0 4px 16px rgba(24,24,24,.045) !important; }
+.payment-batch-table-card .MuiTable-root { min-width: 1120px; }
+.payment-batch-table-card .MuiTableCell-root { padding: 13px 14px; font-size: .72rem; }
+.payment-batch-reference { font-weight: 700 !important; }
+.payment-batch-actions { display: flex; justify-content: center; gap: 7px; }
+.payment-batch-actions .MuiIconButton-root { border: 1px solid #e3e3e3; border-radius: 7px; }
+.payment-batch-loading { min-height: 360px; display: grid; place-items: center; }
+.payment-batch-detail-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 24px; margin-bottom: 22px; }
+.payment-batch-detail-heading { min-width: 0; display: flex; align-items: flex-start; gap: 16px; }
+.payment-batch-title-line { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; }
+.payment-batch-title-line h1 { font-size: clamp(1.35rem, 2vw, 1.75rem); font-weight: 750; line-height: 1.3; }
+.payment-batch-detail-heading > div > .MuiTypography-root:last-child { margin-top: 8px; color: #555; font-size: .84rem; }
+.payment-batch-detail-heading > div > .MuiTypography-root:last-child span { margin-inline: 8px; }
+.payment-batch-header-actions { flex: 0 0 auto; }
+.payment-detail-alert { margin-bottom: 14px; }
+.payment-batch-detail-layout { display: grid; grid-template-columns: minmax(0, 2.2fr) minmax(290px, .9fr); align-items: start; gap: 18px; }
+.payment-detail-summary-card, .payment-detail-information-card, .payment-detail-hrms-card { box-shadow: 0 4px 16px rgba(24,24,24,.045) !important; }
+.payment-detail-summary-card .MuiCardContent-root, .payment-detail-information-card .MuiCardContent-root, .payment-detail-hrms-card .MuiCardContent-root { padding: 22px !important; }
+.payment-detail-summary-card h2, .payment-detail-information-card h2, .payment-detail-hrms-card h2 { font-size: 1.02rem; font-weight: 700; }
+.payment-detail-summary-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); margin: 26px 0; }
+.payment-detail-summary-grid > div { min-width: 0; display: flex; align-items: center; gap: 13px; padding: 0 18px; border-right: 1px solid #e6e6e6; }
+.payment-detail-summary-grid > div:first-child { padding-left: 0; }
+.payment-detail-summary-grid > div:last-child { padding-right: 0; border-right: 0; }
+.payment-detail-summary-icon { flex: 0 0 auto; width: 43px; height: 43px; display: grid; place-items: center; border-radius: 50%; color: #a20a0a; background: #fde7e7; }
+.payment-detail-summary-icon.is-success { color: #23883f; background: #e2f5e7; }
+.payment-detail-summary-icon.is-warning { color: #de7600; background: #fff0dc; }
+.payment-detail-summary-grid > div > div:last-child .MuiTypography-root:first-child { font-size: .73rem; }
+.payment-detail-summary-grid > div > div:last-child .MuiTypography-root:nth-child(2) { margin-top: 5px; font-size: 1.35rem; font-weight: 750; overflow-wrap: anywhere; }
+.payment-detail-summary-grid > div > div:last-child .MuiTypography-root:last-child { margin-top: 7px; color: #666; font-size: .68rem; }
+.payment-detail-summary-grid .is-success { color: #20843d !important; }
+.payment-detail-summary-grid .is-warning { color: #d66e00 !important; }
+.payment-detail-information-card { margin-top: 18px; }
+.payment-detail-list { display: grid; gap: 1px; margin-top: 23px; }
+.payment-detail-list-wide { grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: 28px; }
+.payment-detail-row { min-height: 43px; display: grid; grid-template-columns: minmax(110px, .9fr) minmax(0, 1.1fr); align-items: center; gap: 14px; }
+.payment-detail-row > .MuiTypography-root:first-child { color: #343434; font-size: .76rem; }
+.payment-detail-row > .MuiTypography-root:last-child { min-width: 0; font-size: .76rem; font-weight: 650; overflow-wrap: anywhere; }
+.payment-checksum { display: flex; align-items: center; gap: 5px; }
+.payment-hrms-chip { margin-top: 18px; }
+.payment-detail-hrms-card .payment-detail-row { grid-template-columns: minmax(120px, 1fr) minmax(0, 1fr); }
+.payment-detail-hrms-card .payment-detail-row > .MuiTypography-root:last-child { text-align: right; }
+.payment-hrms-actions { margin-top: 20px; }
+
+/* 9. Payslips */
+.payslips-page .MuiTypography-h1 { color: #7a0000; }
+.payslips-layout { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; align-items: start; }
+.payslips-layout.has-preview { grid-template-columns: minmax(0, 1.8fr) minmax(340px, .95fr); }
+.payslips-main { min-width: 0; display: grid; gap: 16px; }
+.payslip-filter-card .MuiCardContent-root { padding: 18px !important; }
+.payslip-filters { display: grid; grid-template-columns: minmax(230px, 1.5fr) repeat(2, minmax(145px, 1fr)) auto; align-items: center; gap: 14px; }
+.payslip-filters .MuiTextField-root, .payslip-filters .MuiFormControl-root { min-width: 0; }
+.payslip-list-card, .payslip-preview-card { overflow: hidden; }
+.payslip-list-heading, .payslip-preview-heading { min-height: 54px; display: flex; align-items: center; justify-content: space-between; padding: 0 18px; border-bottom: 1px solid #e6e6e6; }
+.payslip-list-heading h2, .payslip-preview-heading h2 { font-size: .95rem; font-weight: 750; }
+.payslip-list-card .MuiTable-root { min-width: 720px; }
+.payslip-employee { display: flex; align-items: center; gap: 12px; }
+.payslip-employee .MuiAvatar-root { width: 36px; height: 36px; color: #9a1111; background: #fde6e6; font-size: .72rem; font-weight: 700; }
+.payslip-employee .MuiTypography-root:first-child { font-size: .78rem; font-weight: 700; }
+.payslip-employee .MuiTypography-root:last-child { margin-top: 2px; color: #666; font-size: .68rem; }
+.payslip-actions { display: flex; justify-content: center; gap: 7px; }
+.payslip-actions .MuiIconButton-root { border: 1px solid #e2e2e2; border-radius: 7px; }
+.payslip-loading { min-height: 260px; display: grid; place-items: center; }
+.payslip-preview-card { position: sticky; top: 86px; }
+.payslip-preview-card > .MuiCardContent-root { padding: 20px !important; }
+.payslip-preview-company { display: flex; justify-content: space-between; align-items: flex-end; gap: 18px; padding-bottom: 16px; border-bottom: 1px solid #ddd; }
+.payslip-preview-company > .MuiTypography-root { max-width: 58%; color: #7a0000; font-size: 1.35rem; font-weight: 800; line-height: 1.1; }
+.payslip-preview-company > div { text-align: right; }
+.payslip-preview-company > div .MuiTypography-root { font-size: .68rem; }
+.payslip-preview-details { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; padding: 16px 0; }
+.payslip-preview-details > div { display: grid; align-content: start; gap: 12px; }
+.payslip-preview-details > div > div .MuiTypography-root:first-child { color: #666; font-size: .63rem; }
+.payslip-preview-details > div > div .MuiTypography-root:last-child { margin-top: 2px; font-size: .73rem; font-weight: 650; overflow-wrap: anywhere; }
+.payslip-preview-section { margin-top: 13px; }
+.payslip-preview-section > h3 { margin-bottom: 6px; font-size: .72rem; font-weight: 800; text-transform: uppercase; }
+.payslip-amount-list { border: 1px solid #e8e8e8; border-radius: 6px; overflow: hidden; }
+.payslip-amount-list > div { min-height: 34px; display: flex; justify-content: space-between; gap: 14px; align-items: center; padding: 6px 10px; border-bottom: 1px solid #ededed; font-size: .66rem; }
+.payslip-amount-list > div:last-child { border-bottom: 0; }
+.payslip-amount-list .is-total { font-weight: 750; background: #fafafa; }
+.payslip-preview-net { display: flex; justify-content: space-between; align-items: center; margin: 14px 0; padding: 13px 11px; color: #8c0707; background: #fff1f1; font-weight: 800; text-transform: uppercase; }
+.payslip-preview-net strong { font-size: 1.2rem; }
+.payslip-preview-note { margin: 16px 0 !important; color: #777; font-size: .62rem !important; text-align: center; }
+
+/* 10. Responsive behaviour */
+@media (max-width: 1200px) {
+  .dashboard-summary-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .dashboard-lower-grid { grid-template-columns: 1fr; }
+  .payment-preview-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .payment-preview-workspace { grid-template-columns: 1fr; }
+  .payment-preview-side { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .payment-batch-filters { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .payment-batch-summaries { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .payment-batch-detail-layout { grid-template-columns: 1fr; }
+  .payment-detail-hrms-card .payment-detail-list { grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: 28px; }
+  .payslips-layout.has-preview { grid-template-columns: 1fr; }
+  .payslip-preview-card { position: static; }
+  .payslip-filters { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+@media (max-width: 760px) {
+  .dashboard-summary-grid { grid-template-columns: 1fr; }
+  .dashboard-summary-card { min-height: 138px; }
+  .dashboard-actions-grid { grid-template-columns: 1fr; }
+  .dashboard-action { min-height: auto; }
+  .dashboard-status-row { align-items: flex-start; flex-direction: column; gap: 6px; }
+  .dashboard-status-row > .MuiTypography-root { padding-left: 46px; text-align: left; }
+  .dashboard-connection { padding-left: 46px; }
+  .payment-preview-metrics, .payment-preview-side { grid-template-columns: 1fr; }
+  .payment-preview-card-heading, .review-employees-toolbar { align-items: stretch; flex-direction: column; }
+  .payment-preview-filters { width: 100%; flex-direction: column; }
+  .payment-preview-filters .MuiTextField-root, .payment-preview-filters .MuiFormControl-root, .review-employees-toolbar .MuiTextField-root { width: 100%; min-width: 0; }
+  .review-employees-toolbar { align-items: stretch; }
+  .review-employees-toolbar .MuiTabs-root { max-width: 100%; }
+  .review-employees-toolbar .MuiTabs-scroller { overflow-x: auto !important; }
+  .payment-validation-alert { align-items: flex-start; }
+  .payment-validation-alert .MuiAlert-action { margin: 8px 0 0; padding: 0; }
+  .payment-attention-item { grid-template-columns: auto minmax(0, 1fr); }
+  .payment-attention-item .MuiButton-root { grid-column: 2; justify-self: start; }
+  .review-pagination { align-items: flex-start; flex-direction: column; }
+  .payment-batch-filters, .payment-batch-summaries { grid-template-columns: 1fr; }
+  .payment-batch-detail-header { flex-direction: column; }
+  .payment-batch-header-actions { width: 100%; }
+  .payment-batch-header-actions .MuiButton-root { width: 100%; }
+  .payment-detail-summary-grid, .payment-detail-list-wide { grid-template-columns: 1fr; }
+  .payment-detail-summary-grid { gap: 16px; }
+  .payment-detail-summary-grid > div { padding: 0 0 16px; border-right: 0; border-bottom: 1px solid #e6e6e6; }
+  .payment-detail-summary-grid > div:last-child { padding-bottom: 0; border-bottom: 0; }
+  .payment-detail-hrms-card .payment-detail-list { grid-template-columns: 1fr; }
+  .payslip-filters { grid-template-columns: 1fr; }
+  .payslip-preview-details { grid-template-columns: 1fr; }
+}
+
+@media (max-width: 900px) {
+  .login-page { grid-template-columns: minmax(300px, .85fr) minmax(420px, 1.15fr); }
+  .login-brand-panel { padding: 44px 38px; }
+  .login-hero-title { font-size: clamp(2.5rem, 5.5vw, 3.5rem) !important; }
+  .login-copy-break { display: none; }
+  .login-form-panel { padding: 42px 34px; }
+  .login-form-heading { margin: 0 0 36px 12px; }
+}
+
+@media (max-width: 899px) {
+  .app-topbar { left: 0 !important; width: 100% !important; }
+  .app-topbar .MuiToolbar-root { padding-inline: 16px; }
+  .application-main { margin-left: 0; padding: 106px 20px 32px; }
+}
+
+@media (max-width: 600px) {
+  .login-page { display: block; min-height: 100vh; background: #f7f7f8; }
+  .login-brand-panel { min-height: auto; padding: 34px 24px 38px; }
+  .login-brand-content { margin: 0; transform: none; }
+  .login-eyebrow { font-size: .66rem !important; }
+  .login-accent-line { width: 88px; margin: 18px 0 15px; }
+  .login-hero-title { font-size: 2.3rem !important; line-height: 1.08 !important; }
+  .login-hero-copy { margin-top: 16px !important; font-size: .95rem !important; }
+  .login-footer { margin-top: 38px; font-size: .72rem; }
+  .login-panel-orb { width: 190px; height: 190px; right: -80px; }
+  .login-circle-lines, .login-dot-grid-brand, .login-wave { display: none; }
+  .login-form-panel { min-height: auto; padding: 44px 18px 56px; }
+  .login-form-heading { margin: 0 0 28px 6px; }
+  .login-form-heading h2 { font-size: 2.65rem; }
+  .login-form-heading p { margin-top: 9px; font-size: .95rem; }
+  .login-card-content { padding: 28px 20px !important; }
+  .login-card .MuiOutlinedInput-root { min-height: 58px; }
+  .login-submit { min-height: 58px !important; margin-top: 30px !important; }
+  .dialog-summary-grid, .detail-grid { grid-template-columns: 1fr; gap: 4px; }
+  .detail-grid > :nth-child(2n) { margin-bottom: 12px; }
+}
+
+@media (max-width: 560px) {
+  .topbar-user-copy { display: none; }
+  .topbar-account-arrow { display: none !important; }
+  .topbar-menu-button { margin-right: 10px !important; }
+  .topbar-page-title { font-size: 1.05rem !important; }
+  .application-main { padding-inline: 16px; }
+}
+
+/* UC-002 Timesheet Validation
+   Add this section to frontend/src/styles/main.css.
+   It uses the SAME shared theme variables/colors as the rest of the app. */
+.timesheet-validation-page .MuiTypography-h1 { color: #7a0000; }
+.validation-control-card { margin-bottom: 18px; box-shadow: 0 4px 16px rgba(24,24,24,.045) !important; }
+.validation-control-card .MuiCardContent-root { padding: 18px 20px !important; }
+.validation-control-row { display: flex; align-items: center; justify-content: space-between; gap: 18px; }
+.validation-summary-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; margin-bottom: 18px; }
+.validation-summary-card { min-width: 0; box-shadow: 0 4px 15px rgba(24,24,24,.04) !important; }
+.validation-summary-card .MuiCardContent-root { min-height: 132px; display: flex; align-items: flex-start; gap: 16px; padding: 20px !important; }
+.validation-summary-icon { flex: 0 0 auto; width: 48px; height: 48px; display: grid; place-items: center; border-radius: 50%; color: #9b0909; background: #fde7e7; }
+.validation-summary-card.is-success .validation-summary-icon { color: #20843d; background: #e2f5e7; }
+.validation-summary-card.is-warning .validation-summary-icon { color: #de7600; background: #fff0dc; }
+.validation-summary-label { color: #3f3f3f; font-size: .8rem !important; }
+.validation-summary-value { margin-top: 4px !important; font-size: 1.55rem !important; font-weight: 750 !important; line-height: 1.2 !important; }
+.validation-summary-description { display: block; margin-top: 8px !important; color: #666; font-size: .7rem !important; }
+.validation-bulk-alert { margin-bottom: 18px; border: 1px solid #d9e5f5; background: #f7fbff !important; }
+.validation-table-card { overflow: hidden; box-shadow: 0 4px 16px rgba(24,24,24,.045) !important; }
+.validation-table-toolbar { min-height: 78px; display: flex; align-items: center; justify-content: space-between; gap: 18px; padding: 16px 18px !important; border-bottom: 1px solid var(--border); }
+.validation-table-toolbar h2 { font-size: .98rem; font-weight: 700; }
+.validation-filter-row { display: flex; align-items: center; gap: 10px; }
+.validation-filter-row .MuiTextField-root { min-width: 220px; }
+.validation-table-card .MuiTable-root { min-width: 980px; }
+.validation-table-card .MuiTableCell-root { padding: 13px 14px; font-size: .76rem; vertical-align: top; }
+.validation-shift-list, .validation-exception-list { display: grid; gap: 6px; }
+.validation-exception-item { display: grid; gap: 4px; max-width: 360px; white-space: normal; }
+.validation-footer-actions { display: flex; justify-content: space-between; gap: 12px; margin-top: 18px; }
+.validation-audit-card { margin-top: 18px; box-shadow: 0 4px 16px rgba(24,24,24,.045) !important; }
+.validation-card-heading { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+.validation-audit-list { margin-top: 16px; border: 1px solid var(--border); border-radius: 9px; overflow: hidden; }
+.validation-audit-row { display: flex; justify-content: space-between; gap: 18px; padding: 12px 14px; border-bottom: 1px solid var(--border); }
+.validation-audit-row:last-child { border-bottom: 0; }
+
+@media (max-width: 1100px) {
+  .validation-summary-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .validation-table-toolbar { align-items: flex-start; flex-direction: column; }
+}
+
+@media (max-width: 700px) {
+  .validation-control-row, .validation-filter-row, .validation-footer-actions { align-items: stretch; flex-direction: column; }
+  .validation-summary-grid { grid-template-columns: 1fr; }
+  .validation-filter-row .MuiTextField-root { min-width: 0; width: 100%; }
+}
+
+/* Staff, pay periods and backpay */
+.staff-filter-card, .backpay-filter-card { margin-bottom: 18px; box-shadow: 0 4px 16px rgba(24,24,24,.045) !important; }
+.staff-filter-card .MuiCardContent-root, .backpay-filter-card .MuiCardContent-root { padding: 14px 18px !important; }
+.staff-filter-content, .backpay-filter-content { display: flex; align-items: center; justify-content: space-between; gap: 18px; }
+.staff-status-filter, .backpay-status-filter { min-width: 220px; }
+.staff-status-filter .MuiSelect-select, .backpay-status-filter .MuiSelect-select { min-width: 0; }
+.staff-filter-title, .backpay-filter-title { font-size: .82rem !important; font-weight: 700 !important; }
+.staff-filter-description, .backpay-filter-description { margin-top: 2px !important; color: #666; font-size: .72rem !important; }
+.staff-alert, .backpay-alert, .pay-periods-alert { margin-bottom: 18px; }
+.staff-form-card, .backpay-form-card { margin-bottom: 18px; box-shadow: 0 4px 16px rgba(24,24,24,.045) !important; }
+.staff-form-card .MuiCardContent-root, .backpay-form-card .MuiCardContent-root { padding: 20px !important; }
+.staff-form-card h2, .backpay-form-card h2 { margin-bottom: 18px; font-size: 1rem; font-weight: 700; }
+.staff-form-grid, .backpay-form-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
+.backpay-description-field { grid-column: span 2; }
+.staff-form-actions, .backpay-form-actions { display: flex; align-items: center; gap: 10px; grid-column: 1 / -1; padding-top: 4px; }
+.staff-table-card, .backpay-table-card, .pay-periods-table-card { overflow: hidden; box-shadow: 0 4px 16px rgba(24,24,24,.045) !important; }
+.staff-table-heading, .backpay-table-heading, .pay-periods-toolbar { min-height: 70px; display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 14px 18px; border-bottom: 1px solid var(--border); }
+.staff-table-heading h2, .backpay-table-heading h2, .pay-periods-toolbar h2 { font-size: 1rem; font-weight: 700; }
+.staff-table-description, .backpay-table-description, .pay-periods-table-description { margin-top: 2px !important; color: #666; font-size: .72rem !important; }
+.staff-table-card .MuiTable-root { min-width: 1080px; }
+.backpay-table-card .MuiTable-root { min-width: 920px; }
+.pay-periods-table-card .MuiTable-root { min-width: 540px; }
+.staff-table-card .MuiTableCell-root, .backpay-table-card .MuiTableCell-root, .pay-periods-table-card .MuiTableCell-root { padding: 13px 16px; font-size: .76rem; }
+.staff-table-card .MuiTableHead-root, .backpay-table-card .MuiTableHead-root, .pay-periods-table-card .MuiTableHead-root { background: #fafafa; }
+.staff-row-actions { display: inline-flex; gap: 8px; }
+.staff-external-ref, .pay-period-range { color: #555; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .72rem !important; }
+.staff-loading, .backpay-loading, .pay-periods-loading { min-height: 180px; display: grid; place-items: center; }
+.staff-empty, .backpay-empty, .pay-periods-empty { margin: 18px; }
+
+.staff-summary-grid, .backpay-summary-grid, .pay-periods-summary-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; margin-bottom: 18px; }
+.staff-summary-card, .backpay-summary-card, .pay-periods-summary-card { min-width: 0; min-height: 100px; box-shadow: 0 4px 15px rgba(24,24,24,.04) !important; }
+.staff-summary-card .MuiCardContent-root, .backpay-summary-card .MuiCardContent-root { display: flex; align-items: flex-start; gap: 12px; padding: 15px !important; }
+.pay-periods-summary-card { display: flex; align-items: flex-start; gap: 12px; padding: 15px; }
+.staff-summary-icon, .backpay-summary-icon, .pay-periods-summary-icon { flex: 0 0 auto; display: grid; place-items: center; width: 38px; height: 38px; border-radius: 50%; color: #a20a0a; background: #fde7e7; }
+.staff-summary-icon svg, .backpay-summary-icon svg, .pay-periods-summary-icon svg { font-size: 1.22rem; }
+.staff-summary-icon.is-success, .backpay-summary-icon.is-success, .pay-periods-summary-icon.is-success { color: #20843d; background: #e2f5e7; }
+.staff-summary-icon.is-muted, .pay-periods-summary-icon.is-muted { color: #656565; background: #eeeeee; }
+.backpay-summary-icon.is-warning { color: #b45309; background: #fff3da; }
+.pay-periods-summary-icon.is-info { color: #1769aa; background: #e4f1fb; }
+.staff-summary-label, .backpay-summary-label, .pay-periods-summary-label { color: #3f3f3f; font-size: .72rem !important; }
+.staff-summary-value, .backpay-summary-value, .pay-periods-summary-value { margin-top: 3px !important; color: #181818; font-size: 1.2rem !important; font-weight: 750 !important; line-height: 1.2 !important; }
+.staff-summary-detail, .backpay-summary-detail, .pay-periods-summary-detail { display: block; margin-top: 5px !important; color: #666; font-size: .68rem !important; }
+.pay-periods-table-card .MuiTableBody-root .MuiTableRow-root.is-active { background: #f4fbf6; }
+.pay-periods-table-card .MuiTableBody-root .MuiTableRow-root.is-active:hover { background: #edf8f0; }
+
+/* UC-003 Payroll Calculation legacy page */
+.payroll-calculation-page { max-width: 1440px; }
+.payroll-calculation-page .page-intro { max-width: 950px; }
+.payroll-calculation-page .field-row { padding: 14px 16px; border: 1px solid var(--border); border-radius: 10px; background: #fff; }
+.payroll-calculation-page .button-row:not(.card-actions):not(.pagination) { margin-bottom: 18px; }
+.payroll-calculation-page .stat-grid { grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 14px; }
+.payroll-calculation-page .stat-tile { min-width: 0; padding: 16px; }
+.payroll-calculation-page .card { box-shadow: 0 4px 16px rgba(24,24,24,.045); }
+.payroll-calculation-page .tab-row { overflow-x: auto; }
+.payroll-calculation-page .tab { white-space: nowrap; }
+
+@media (max-width: 1000px) {
+  .staff-form-grid, .backpay-form-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .staff-summary-grid, .backpay-summary-grid, .pay-periods-summary-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .payroll-calculation-page .stat-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+
+@media (max-width: 700px) {
+  .staff-form-grid, .backpay-form-grid { grid-template-columns: 1fr; }
+  .staff-summary-grid, .backpay-summary-grid, .pay-periods-summary-grid { grid-template-columns: 1fr; }
+  .backpay-description-field { grid-column: auto; }
+  .staff-form-actions, .backpay-form-actions { align-items: stretch; flex-direction: column; }
+  .staff-table-heading, .backpay-table-heading, .pay-periods-toolbar { align-items: flex-start; flex-direction: column; }
+  .staff-filter-content, .backpay-filter-content { align-items: stretch; flex-direction: column; }
+  .staff-status-filter, .backpay-status-filter { min-width: 0; }
+  .payroll-calculation-page { padding-inline: 0; }
+  .payroll-calculation-page .field-row { align-items: stretch; flex-direction: column; }
+  .payroll-calculation-page .stat-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
