@@ -26,6 +26,18 @@ button, input { font: inherit; }
 a { color: inherit; }
 #root { min-height: 100vh; }
 
+/* Keep legacy element styles from distorting Material UI's icon-only controls.
+   IconButton renders as a native button, so it needs an explicit reset. */
+button.MuiIconButton-root {
+  min-height: 0;
+  padding: 8px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font-size: inherit;
+}
+button.MuiIconButton-root:hover:not(:disabled) { border-color: transparent; color: inherit; }
+
 .page-enter { animation: page-enter 180ms ease-out; }
 
 @keyframes page-enter {
@@ -75,7 +87,8 @@ a { color: inherit; }
 .app-topbar .MuiToolbar-root { min-height: 82px; padding-inline: 28px; }
 .topbar-menu-button { margin-right: 24px !important; color: #181818 !important; }
 .topbar-page-title { flex-grow: 1; color: #7a0000; font-size: 1.18rem !important; font-weight: 700 !important; }
-.topbar-account { display: flex; align-items: center; }
+.topbar-account { display: flex; align-items: center; gap: 3px; }
+.topbar-account > .MuiIconButton-root { flex: 0 0 auto; }
 .topbar-avatar { width: 38px !important; height: 38px !important; background-color: #7a0000 !important; font-size: .8rem !important; font-weight: 700; }
 .topbar-user-copy { min-width: 112px; margin-left: 5px; }
 .topbar-user-copy .MuiTypography-root { line-height: 1.3; }
@@ -508,4 +521,79 @@ a { color: inherit; }
   .validation-control-row, .validation-filter-row, .validation-footer-actions { align-items: stretch; flex-direction: column; }
   .validation-summary-grid { grid-template-columns: 1fr; }
   .validation-filter-row .MuiTextField-root { min-width: 0; width: 100%; }
+}
+
+/* Staff, pay periods and backpay */
+.staff-filter-card, .backpay-filter-card { margin-bottom: 18px; box-shadow: 0 4px 16px rgba(24,24,24,.045) !important; }
+.staff-filter-card .MuiCardContent-root, .backpay-filter-card .MuiCardContent-root { padding: 14px 18px !important; }
+.staff-filter-content, .backpay-filter-content { display: flex; align-items: center; justify-content: space-between; gap: 18px; }
+.staff-status-filter, .backpay-status-filter { min-width: 220px; }
+.staff-status-filter .MuiSelect-select, .backpay-status-filter .MuiSelect-select { min-width: 0; }
+.staff-filter-title, .backpay-filter-title { font-size: .82rem !important; font-weight: 700 !important; }
+.staff-filter-description, .backpay-filter-description { margin-top: 2px !important; color: #666; font-size: .72rem !important; }
+.staff-alert, .backpay-alert, .pay-periods-alert { margin-bottom: 18px; }
+.staff-form-card, .backpay-form-card { margin-bottom: 18px; box-shadow: 0 4px 16px rgba(24,24,24,.045) !important; }
+.staff-form-card .MuiCardContent-root, .backpay-form-card .MuiCardContent-root { padding: 20px !important; }
+.staff-form-card h2, .backpay-form-card h2 { margin-bottom: 18px; font-size: 1rem; font-weight: 700; }
+.staff-form-grid, .backpay-form-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
+.backpay-description-field { grid-column: span 2; }
+.staff-form-actions, .backpay-form-actions { display: flex; align-items: center; gap: 10px; grid-column: 1 / -1; padding-top: 4px; }
+.staff-table-card, .backpay-table-card, .pay-periods-table-card { overflow: hidden; box-shadow: 0 4px 16px rgba(24,24,24,.045) !important; }
+.staff-table-heading, .backpay-table-heading, .pay-periods-toolbar { min-height: 70px; display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 14px 18px; border-bottom: 1px solid var(--border); }
+.staff-table-heading h2, .backpay-table-heading h2, .pay-periods-toolbar h2 { font-size: 1rem; font-weight: 700; }
+.staff-table-description, .backpay-table-description, .pay-periods-table-description { margin-top: 2px !important; color: #666; font-size: .72rem !important; }
+.staff-table-card .MuiTable-root { min-width: 1080px; }
+.backpay-table-card .MuiTable-root { min-width: 920px; }
+.pay-periods-table-card .MuiTable-root { min-width: 540px; }
+.staff-table-card .MuiTableCell-root, .backpay-table-card .MuiTableCell-root, .pay-periods-table-card .MuiTableCell-root { padding: 13px 16px; font-size: .76rem; }
+.staff-table-card .MuiTableHead-root, .backpay-table-card .MuiTableHead-root, .pay-periods-table-card .MuiTableHead-root { background: #fafafa; }
+.staff-row-actions { display: inline-flex; gap: 8px; }
+.staff-external-ref, .pay-period-range { color: #555; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .72rem !important; }
+.staff-loading, .backpay-loading, .pay-periods-loading { min-height: 180px; display: grid; place-items: center; }
+.staff-empty, .backpay-empty, .pay-periods-empty { margin: 18px; }
+
+.staff-summary-grid, .backpay-summary-grid, .pay-periods-summary-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; margin-bottom: 18px; }
+.staff-summary-card, .backpay-summary-card, .pay-periods-summary-card { min-width: 0; min-height: 100px; box-shadow: 0 4px 15px rgba(24,24,24,.04) !important; }
+.staff-summary-card .MuiCardContent-root, .backpay-summary-card .MuiCardContent-root { display: flex; align-items: flex-start; gap: 12px; padding: 15px !important; }
+.pay-periods-summary-card { display: flex; align-items: flex-start; gap: 12px; padding: 15px; }
+.staff-summary-icon, .backpay-summary-icon, .pay-periods-summary-icon { flex: 0 0 auto; display: grid; place-items: center; width: 38px; height: 38px; border-radius: 50%; color: #a20a0a; background: #fde7e7; }
+.staff-summary-icon svg, .backpay-summary-icon svg, .pay-periods-summary-icon svg { font-size: 1.22rem; }
+.staff-summary-icon.is-success, .backpay-summary-icon.is-success, .pay-periods-summary-icon.is-success { color: #20843d; background: #e2f5e7; }
+.staff-summary-icon.is-muted, .pay-periods-summary-icon.is-muted { color: #656565; background: #eeeeee; }
+.backpay-summary-icon.is-warning { color: #b45309; background: #fff3da; }
+.pay-periods-summary-icon.is-info { color: #1769aa; background: #e4f1fb; }
+.staff-summary-label, .backpay-summary-label, .pay-periods-summary-label { color: #3f3f3f; font-size: .72rem !important; }
+.staff-summary-value, .backpay-summary-value, .pay-periods-summary-value { margin-top: 3px !important; color: #181818; font-size: 1.2rem !important; font-weight: 750 !important; line-height: 1.2 !important; }
+.staff-summary-detail, .backpay-summary-detail, .pay-periods-summary-detail { display: block; margin-top: 5px !important; color: #666; font-size: .68rem !important; }
+.pay-periods-table-card .MuiTableBody-root .MuiTableRow-root.is-active { background: #f4fbf6; }
+.pay-periods-table-card .MuiTableBody-root .MuiTableRow-root.is-active:hover { background: #edf8f0; }
+
+/* UC-003 Payroll Calculation legacy page */
+.payroll-calculation-page { max-width: 1440px; }
+.payroll-calculation-page .page-intro { max-width: 950px; }
+.payroll-calculation-page .field-row { padding: 14px 16px; border: 1px solid var(--border); border-radius: 10px; background: #fff; }
+.payroll-calculation-page .button-row:not(.card-actions):not(.pagination) { margin-bottom: 18px; }
+.payroll-calculation-page .stat-grid { grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 14px; }
+.payroll-calculation-page .stat-tile { min-width: 0; padding: 16px; }
+.payroll-calculation-page .card { box-shadow: 0 4px 16px rgba(24,24,24,.045); }
+.payroll-calculation-page .tab-row { overflow-x: auto; }
+.payroll-calculation-page .tab { white-space: nowrap; }
+
+@media (max-width: 1000px) {
+  .staff-form-grid, .backpay-form-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .staff-summary-grid, .backpay-summary-grid, .pay-periods-summary-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .payroll-calculation-page .stat-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+
+@media (max-width: 700px) {
+  .staff-form-grid, .backpay-form-grid { grid-template-columns: 1fr; }
+  .staff-summary-grid, .backpay-summary-grid, .pay-periods-summary-grid { grid-template-columns: 1fr; }
+  .backpay-description-field { grid-column: auto; }
+  .staff-form-actions, .backpay-form-actions { align-items: stretch; flex-direction: column; }
+  .staff-table-heading, .backpay-table-heading, .pay-periods-toolbar { align-items: flex-start; flex-direction: column; }
+  .staff-filter-content, .backpay-filter-content { align-items: stretch; flex-direction: column; }
+  .staff-status-filter, .backpay-status-filter { min-width: 0; }
+  .payroll-calculation-page { padding-inline: 0; }
+  .payroll-calculation-page .field-row { align-items: stretch; flex-direction: column; }
+  .payroll-calculation-page .stat-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }

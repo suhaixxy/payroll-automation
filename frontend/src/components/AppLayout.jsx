@@ -62,11 +62,13 @@ const rosterStaffLinks = [
   { label: "Roster Sync", path: "/roster", icon: <SyncAltRounded /> },
   { label: "Staff", path: "/staff", icon: <BadgeRounded /> },
   { label: "Pay Periods", path: "/pay-periods", icon: <TodayRounded /> },
+  { label: "Backpay Reports", path: "/backpay-reports", icon: <DescriptionRounded /> },
 ];
 
 const pageTitles = [
   { match: /^\/dashboard$/, title: "Dashboard" },
   { match: /^\/roster$/, title: "Roster Sync" },
+  { match: /^\/backpay-reports$/, title: "Backpay Reports" },
   { match: /^\/timesheets$/, title: "Timesheet Validation" },
   { match: /^\/payroll$/, title: "Payroll Calculation" },
   { match: /^\/approvals$/, title: "Approvals" },

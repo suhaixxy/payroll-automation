@@ -11,7 +11,8 @@ const ANCHOR_START = new Date("2026-01-01T00:00:00Z");
 const SELECT_COLUMNS = `
   id,
   to_char(start_date, 'YYYY-MM-DD') AS "startDate",
-  to_char(end_date, 'YYYY-MM-DD') AS "endDate"
+  to_char(end_date, 'YYYY-MM-DD') AS "endDate",
+  is_locked AS "isLocked"
 `;
 
 function formatDate(date) {
@@ -72,7 +73,12 @@ async function ensurePayPeriodsSeeded({ periodCount = PERIODS_TO_GENERATE } = {}
 // Marks which period is "active" (covers today) so the frontend can
 // default its dropdown without re-implementing this date logic itself.
 async function listPayPeriods() {
-  const { rows } = await pool.query(`SELECT ${SELECT_COLUMNS} FROM pay_period ORDER BY start_date, id`);
+  const { rows } = await pool.query(
+    `SELECT ${SELECT_COLUMNS},
+       (SELECT MAX(updated_at) FROM timesheet WHERE pay_period_id = pay_period.id) AS "lastSyncedAt"
+     FROM pay_period
+     ORDER BY start_date, id`
+  );
   const today = formatDate(new Date());
   return rows.map((period) => ({
     ...period,

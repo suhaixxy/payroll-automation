@@ -105,7 +105,7 @@ describe("runRosterSync", () => {
 
     const result = await runRosterSync(payPeriodId);
 
-    expect(client.query).toHaveBeenCalledWith(expect.stringContaining("'invalid_time'"), [payPeriodId, "staff-1", "Andrea Chua (missing clock-in/out)", "2026-08-01", "Andrea Chua"]);
+    expect(client.query).toHaveBeenCalledWith(expect.stringContaining("'invalid_time'"), [payPeriodId, "staff-1", "Andrea Chua (missing clock-in/out)", "2026-08-01", "Andrea Chua", "08:00", null]);
     expect(result.invalidTimeCount).toBe(1);
   });
 

@@ -10,3 +10,83 @@
 .roster-card { margin: 1.25rem 0; }.roster-card h2 { font-size: 1.1rem; }.roster-table-scroll { overflow-x: auto; }.roster-page table { width: 100%; border-collapse: collapse; }.roster-page th, .roster-page td { padding: .65rem; border-bottom: 1px solid #e5e7eb; text-align: left; }.roster-expandable { cursor: pointer; }.roster-expandable:hover { background: #f9fafb; }.roster-breakdown > td { background: #f9fafb; }
 .roster-empty { color: #6b7280; }.roster-exception-list, .roster-history-list { margin: 0; padding: 0; list-style: none; }.roster-exception-list li, .roster-history-list li { display: flex; align-items: center; gap: .65rem; margin-top: .5rem; padding: .65rem; border-radius: 6px; }.roster-unmatched { background: #fef3c7; }.roster-critical { background: #fee2e2; }.roster-synced { background: #dcfce7; }.roster-exception-list li span, .roster-history-list li span { font-weight: 700; }.roster-exception-list li small, .roster-history-list li small { color: #4b5563; }.roster-history-list time { margin-left: auto; color: #6b7280; font-size: .8rem; }
 @media (max-width: 700px) { .roster-page { padding: 1rem; }.roster-stat-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }.roster-history-list li { flex-wrap: wrap; }.roster-history-list time { margin-left: 0; width: 100%; } }
+
+/* RosterSyncPage (MUI rebuild) — uses the same shared theme variables/colors
+   as the rest of the app (see main.css). The rules above this line are kept
+   as-is for BackpayReportsPage.jsx, which still uses the plain-HTML markup. */
+.roster-sync-page .MuiTypography-h1 { color: #7a0000; }
+.roster-sync-control-card { margin-bottom: 18px; box-shadow: 0 4px 16px rgba(24,24,24,.045) !important; }
+.roster-sync-control-card .MuiCardContent-root { display: grid; gap: 16px; padding: 18px 20px !important; }
+.roster-sync-health-row { display: flex; flex-wrap: wrap; gap: 10px; }
+.roster-sync-toolbar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 16px; }
+.roster-sync-period-select { min-width: 300px; }
+.roster-sync-actions { display: flex; flex-wrap: wrap; gap: 12px; }
+.roster-sync-period-option { display: flex; align-items: center; justify-content: space-between; gap: 12px; width: 100%; }
+.roster-sync-locked-badge { display: inline-flex; align-items: center; gap: 3px; color: #8a6d1f; font-size: .68rem; font-weight: 700; }
+.roster-sync-alert { margin: 0 0 16px; }
+.roster-sync-metrics { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; margin-bottom: 18px; }
+.roster-sync-metric { min-width: 0; min-height: 92px; box-shadow: 0 4px 15px rgba(24,24,24,.04) !important; }
+.roster-sync-metric .MuiCardContent-root { display: flex; align-items: flex-start; gap: 11px; padding: 14px !important; }
+.roster-sync-metric-icon { flex: 0 0 auto; width: 38px; height: 38px; display: grid; place-items: center; border-radius: 50%; color: #a20a0a; background: #fde7e7; }
+.roster-sync-metric-icon svg { font-size: 1.25rem; }
+.roster-sync-metric.is-success .roster-sync-metric-icon { color: #20843d; background: #e2f5e7; }
+.roster-sync-metric.is-warning .roster-sync-metric-icon { color: #b45309; background: #fff3da; }
+.roster-sync-metric-label { color: #3f3f3f; font-size: .72rem !important; }
+.roster-sync-metric-value { margin-top: 3px !important; font-size: 1.2rem !important; font-weight: 750 !important; line-height: 1.25 !important; overflow-wrap: anywhere; }
+.roster-sync-section-card { margin-bottom: 18px; box-shadow: 0 4px 16px rgba(24,24,24,.045) !important; }
+.roster-sync-section-card .MuiCardContent-root { padding: 20px !important; }
+.roster-sync-section-card h2 { margin-bottom: 14px; color: #181818; font-size: 1rem; font-weight: 700; }
+.roster-sync-history-table .MuiTable-root { min-width: 560px; }
+.roster-sync-history-actions { display: flex; justify-content: center; padding: 10px; border: 1px solid #e6e6e6; border-top: 0; border-radius: 0 0 9px 9px; }
+.roster-sync-history-table { border: 1px solid #e6e6e6; border-radius: 9px; overflow: hidden; }
+.roster-sync-draft-table { border: 1px solid #e6e6e6; border-radius: 9px; overflow: hidden; }
+.roster-sync-draft-table .MuiTableHead-root { background: #fafafa; }
+.roster-sync-draft-table .MuiTableHead-root .MuiTableCell-root { color: #4b4b4b; font-size: .7rem; font-weight: 700; letter-spacing: .03em; text-transform: uppercase; }
+.roster-sync-draft-outer-table { min-width: 560px; table-layout: fixed; }
+.roster-sync-expandable-row { cursor: pointer; transition: background-color 120ms ease; }
+.roster-sync-expandable-row:hover { background: #f9fafb; }
+.roster-sync-expandable-row.is-expanded { background: #fdf5f5; }
+.roster-sync-expandable-row.is-expanded:hover { background: #fbeaea; }
+.roster-sync-shift-count { display: inline-flex; align-items: center; gap: 2px; color: #555; font-size: .74rem; }
+.roster-sync-shift-toggle.MuiIconButton-root { color: #7a0000; }
+.roster-sync-breakdown-row .MuiTableCell-root { border-bottom: 0; }
+.roster-sync-breakdown-row:last-child .MuiTableCell-root { border-bottom: 1px solid rgba(224,224,224,1); }
+.roster-sync-breakdown-cell { padding: 0 !important; background: #fbfbfb; }
+.roster-sync-breakdown-panel { padding: 14px 18px 16px 40px; border-top: 1px solid #ececec; }
+.roster-sync-breakdown-caption { margin-bottom: 8px !important; color: #8a8a8a; font-size: .68rem !important; font-weight: 700 !important; letter-spacing: .03em; text-transform: uppercase; }
+.roster-sync-breakdown-table.MuiTable-root { min-width: 0; border: 1px solid #ececec; border-radius: 7px; background: #fff; overflow: hidden; }
+.roster-sync-breakdown-table .MuiTableHead-root { background: #f3f3f3; }
+.roster-sync-breakdown-table .MuiTableHead-root .MuiTableCell-root { color: #777; font-size: .64rem; font-weight: 700; letter-spacing: .02em; text-transform: uppercase; }
+.roster-sync-breakdown-table .MuiTableCell-root { padding: 8px 12px; font-size: .74rem; }
+.roster-sync-breakdown-table .MuiTableBody-root .MuiTableRow-root:last-child .MuiTableCell-root { border-bottom: 0; }
+.roster-sync-exception-list { display: grid; gap: 12px; }
+.roster-sync-exception-row { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 16px; padding: 14px; border: 1px solid #e6e6e6; border-radius: 9px; }
+.roster-sync-exception-info { display: flex; align-items: center; gap: 12px; min-width: 220px; }
+.roster-sync-exception-name { font-size: .82rem; font-weight: 700; }
+.roster-sync-exception-meta { margin-top: 2px; color: #666; font-size: .72rem; }
+.roster-sync-exception-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
+.roster-sync-exception-select { min-width: 200px; }
+.roster-sync-exception-actions { display: flex; gap: 8px; }
+.roster-sync-resolved-list { display: grid; gap: 10px; }
+.roster-sync-resolved-row { display: flex; align-items: center; gap: 14px; padding: 12px 14px; border: 1px solid #e6e6e6; border-radius: 9px; background: #fafafa; }
+.roster-sync-resolved-info { flex: 1; min-width: 0; }
+.roster-sync-resolved-name { font-size: .8rem; font-weight: 700; }
+.roster-sync-resolved-meta { margin-top: 2px; color: #666; font-size: .72rem; }
+.roster-sync-undo-button { flex: 0 0 auto; margin-left: auto; }
+
+@media (max-width: 900px) {
+  .roster-sync-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .roster-sync-toolbar { flex-direction: column; align-items: stretch; }
+  .roster-sync-period-select { min-width: 0; }
+  .roster-sync-actions { width: 100%; }
+}
+
+@media (max-width: 700px) {
+  .roster-sync-metrics { grid-template-columns: 1fr; }
+  .roster-sync-actions { flex-direction: column; align-items: stretch; }
+  .roster-sync-exception-row, .roster-sync-resolved-row { flex-direction: column; align-items: stretch; }
+  .roster-sync-exception-controls { flex-direction: column; align-items: stretch; }
+  .roster-sync-exception-select { min-width: 0; }
+  .roster-sync-exception-actions { justify-content: flex-end; }
+  .roster-sync-undo-button { margin-left: 0; width: 100%; }
+}

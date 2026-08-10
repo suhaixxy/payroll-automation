@@ -5,6 +5,7 @@ const rosterController = require("../controllers/rosterController");
 
 const router = express.Router();
 
+router.get("/health", rosterController.getSourceHealth);
 router.post("/sync", rosterController.importNow);
 router.get("/sync/summary", rosterController.getSyncSummary);
 router.get("/sync/history", rosterController.getSyncHistory);

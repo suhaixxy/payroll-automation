@@ -2,6 +2,8 @@
 // along to rosterSyncService, then sends back a JSON response.
 
 const rosterSyncService = require("../services/rosterSyncService");
+const { pool } = require("../config/database");
+const { fetchRosterRows } = require("../adapters/googleSheetsAdapter");
 
 // POST /api/roster/sync — "Import Now" button
 async function importNow(req, res, next) {
@@ -53,6 +55,21 @@ async function getSyncHistory(req, res, next) {
   }
 }
 
+// GET /api/roster/health — reports dependency reachability without making
+// either dependency's failure an HTTP failure.
+async function getSourceHealth(req, res) {
+  const [database, googleSheet] = await Promise.all([
+    pool.query("SELECT 1")
+      .then(() => "connected")
+      .catch(() => "disconnected"),
+    fetchRosterRows()
+      .then(() => "connected")
+      .catch(() => "disconnected"),
+  ]);
+
+  res.status(200).json({ database, googleSheet });
+}
+
 async function resolveException(req, res, next) {
   try {
     const result = await rosterSyncService.resolveException(req.params.timesheetRowId, req.body);
@@ -98,4 +115,4 @@ async function resetPeriodResolutions(req, res, next) {
   }
 }
 
-module.exports = { importNow, getSyncSummary, getSyncHistory, resolveException, getResolvedExceptions, undoException, resetPeriodResolutions };
+module.exports = { importNow, getSyncSummary, getSyncHistory, getSourceHealth, resolveException, getResolvedExceptions, undoException, resetPeriodResolutions };
