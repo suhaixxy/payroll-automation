@@ -190,10 +190,10 @@ describe('run lifecycle (§3.1, §3.2, §5.9)', () => {
     expect(data.status).toBe('calculated');
 
     // Complete: PT-A (904.50 gross / 180.00 CPF) + FT-B (360.00, exempt).
-    // Incomplete (excluded): PT-C no rate, plus the 5 seeded staff with no
+    // Incomplete (excluded): PT-C no rate, plus the 10 seeded staff with no
     // data in this test window.
     expect(data.linesComplete).toBe(2);
-    expect(data.linesIncomplete).toBe(6);
+    expect(data.linesIncomplete).toBe(11);
     expect(data.totals.gross).toBe('1264.50');
     expect(data.totals.employeeDeductions).toBe('180.00'); // CPF employee ONLY
     expect(data.totals.employerCost).toBe('159.26'); // 155.00 + 2.26 + 2.00
@@ -224,12 +224,12 @@ describe('run lifecycle (§3.1, §3.2, §5.9)', () => {
     const all = await asAccounting(request(app).get(`/api/uc003/periods/${periodId}/lines?limit=50`));
     expect(all.status).toBe(200);
     expect(all.body.data.run.runNumber).toBe(2);
-    expect(all.body.meta.total).toBe(8);
+    expect(all.body.meta.total).toBe(13);
 
     const incompleteOnly = await asAccounting(
       request(app).get(`/api/uc003/periods/${periodId}/lines?status=incomplete`)
     );
-    expect(incompleteOnly.body.meta.total).toBe(6);
+    expect(incompleteOnly.body.meta.total).toBe(11);
     expect(
       incompleteOnly.body.data.lines.every((line) => line.lineStatus === 'incomplete')
     ).toBe(true);
@@ -298,7 +298,7 @@ describe('register export and per-staff variance (§7.2, §7.9)', () => {
         'hourly_rate_used,gross_from_hours,incentive_amount,adjustments_total,gross_total,' +
         'cpf_employee,cpf_employer,sdl_employer,net_payable,line_status,incomplete_reasons'
     );
-    expect(csvLines).toHaveLength(1 + 8); // header + one row per active staff line
+    expect(csvLines).toHaveLength(1 + 13); // header + one row per active staff line
     const ptaRow = csvLines.find((row) => row.startsWith('T-PTA,'));
     expect(ptaRow).toContain('904.50'); // gross from hours
     expect(ptaRow).toContain('724.50'); // net payable
@@ -313,7 +313,7 @@ describe('register export and per-staff variance (§7.2, §7.9)', () => {
     expect(response.status).toBe(200);
     const data = response.body.data;
     expect(data.currentRun.runNumber).toBe(1); // run 2 was voided above
-    expect(data.rows).toHaveLength(8);
+    expect(data.rows).toHaveLength(13);
 
     const pta = data.rows.find((row) => row.externalRef === 'T-PTA');
     expect(pta.currentNet).toBe('724.50');
