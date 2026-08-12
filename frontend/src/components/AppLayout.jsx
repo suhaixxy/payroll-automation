@@ -287,3 +287,11 @@ export default function AppLayout() {
     </Box>
   );
 }
+
+<SidebarLink
+  icon={<FactCheckRounded />}
+  label="Timesheet Validation"
+  path="/timesheets"
+  active={location.pathname === "/timesheets"}
+  onNavigate={onNavigate}
+/>
