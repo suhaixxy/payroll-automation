@@ -21,7 +21,7 @@ Payroll Automation is an integrated full-stack application that carries payroll 
 | Database | PostgreSQL 16, SQL migrations and integrated SQL seeds, Docker Compose locally |
 | Security | JWT, bcrypt, Helmet, CORS, login rate limiting, role authorization |
 | Testing | Jest, Supertest, disposable PostgreSQL test databases |
-| Intended deployment | Vercel frontend, Render backend, managed PostgreSQL; not deployed yet |
+| Deployment | Vercel frontend, Render backend, Neon PostgreSQL |
 
 ## Repository Structure
 
@@ -84,17 +84,19 @@ Copy [.env.example](.env.example) and replace placeholder secrets locally. Do no
 
 ## Database Setup
 
-Local PostgreSQL runs in Docker on port `5432`. The migration runner applies all 20 retained migrations in `backend/src/db/migrations/` and records them in `schema_migrations`. Migration history is intentionally preserved; add a new migration rather than rewriting an applied one.
+Local PostgreSQL runs in Docker on port `5432`. The migration runner applies all 22 retained migrations in `backend/src/db/migrations/` and records them in `schema_migrations`. Migration history is intentionally preserved; add a new migration rather than rewriting an applied one.
 
-The seed runner executes these six files in order:
+The seed runner automatically executes all eight current SQL seed files in filename order. The original integrated set contained six files; `011_uc001_roster_expanded.sql` and `060_uc004_demo_pending.sql` were integrated later and are also executed by `npm run seed`.
 
 ```text
 001_shared_reference.sql
 010_uc001_roster.sql
+011_uc001_roster_expanded.sql
 020_uc002_validation.sql
 030_uc003_calculation.sql
 040_uc004_approval.sql
 050_uc005_payment.sql
+060_uc004_demo_pending.sql
 ```
 
 The current baseline contains seven non-overlapping pay periods, including one draft period. Seeds are intended for local demonstration and testing, not production data.
@@ -156,19 +158,36 @@ npm run build
 
 ## Deployment
 
-The project has **not been deployed yet**.
+Production deployment is complete on the `main` branch.
 
-**Public Application URL: To be added after deployment.**
+## Live Deployment
 
-Intended deployment procedure:
+- Frontend: [https://payroll-automation-three.vercel.app](https://payroll-automation-three.vercel.app/)
+- Backend API: [https://payroll-automation-zekw.onrender.com](https://payroll-automation-zekw.onrender.com/)
+- Health Check: [https://payroll-automation-zekw.onrender.com/health](https://payroll-automation-zekw.onrender.com/health)
+- Deployment stack: Vercel -> Render -> Neon PostgreSQL
 
-1. Provision a managed PostgreSQL database and set its SSL connection string as backend `DATABASE_URL`.
-2. Deploy `backend/` to Render (or an equivalent Node host), install dependencies, run `npm run migrate`, optionally load demonstration seeds only when explicitly required, and start with `npm start`.
-3. Configure backend production variables: `NODE_ENV=production`, a strong `JWT_SECRET`, `JWT_EXPIRES_IN`, `FRONTEND_URL`, `DATABASE_URL`, `HRMS_MODE=mock`, `GENERATE_PAY_PERIODS_ON_STARTUP=false`, and integration settings that are actually used.
-4. Deploy `frontend/` to Vercel (or an equivalent static host) using `npm run build` and set `VITE_BACKEND_URL` to the public backend origin.
-5. Set backend `FRONTEND_URL` to the final frontend origin, rerun migrations for the target database and perform authentication, workflow, file-download and authorization smoke tests.
+### Production configuration
 
-Do not publish local database credentials or seed passwords. HRMS remains in mock mode because no real external HRMS API is available.
+Render deploys the backend from the repository root with **Root Directory** left blank:
+
+```text
+Build Command: npm ci --prefix backend
+Start Command: npm --prefix backend start
+Health Check Path: /health
+```
+
+The Render environment uses `NODE_ENV=production`, a Neon pooled connection in `DATABASE_URL`, `FRONTEND_URL=https://payroll-automation-three.vercel.app`, `HRMS_MODE=mock`, and `GENERATE_PAY_PERIODS_ON_STARTUP=false`. Render supplies the runtime port. Secrets and database connection strings must not be published.
+
+Vercel deploys the `main` branch with **Root Directory** `frontend`, framework **Vite**, build command `npm run build`, and output directory `dist`. `VITE_BACKEND_URL=https://payroll-automation-zekw.onrender.com` points the frontend to Render. [`frontend/vercel.json`](frontend/vercel.json) provides the SPA fallback rewrite.
+
+Neon hosts the production PostgreSQL database. Migrations were applied using a direct connection, while the running Render backend uses a pooled connection. Connection strings and credentials are intentionally omitted.
+
+Production smoke testing verified that the login page loads, valid manager authentication succeeds, invalid credentials display “Invalid email or password.”, protected routes redirect unauthenticated users to login, the manager dashboard loads API data, and `/health` reports `{"status":"ok","database":"connected"}`. UC-001 through UC-004 pages were also manually checked with no blocking issue observed.
+
+External file storage is not required by the implemented design. CSV/GIRO payment files and payslip PDFs are generated on demand and are not persisted as uploaded assets in Cloudinary, Google Drive, or equivalent storage.
+
+HRMS remains in mock mode because no real external HRMS API is available.
 
 ## Documentation
 
