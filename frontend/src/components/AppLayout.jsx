@@ -158,6 +158,13 @@ function Sidebar({ onNavigate }) {
                 })}
               </List>
             </Collapse>
+            <SidebarLink
+              icon={<FactCheckRounded />}
+              label="Timesheet Validation"
+              path="/timesheets"
+              active={location.pathname === "/timesheets"}
+              onNavigate={onNavigate}
+            />
             <ListItemButton
               className={`sidebar-link sidebar-parent-link${isPayrollRoute ? " sidebar-parent-active" : ""}`}
               onClick={() => setPayrollOpen((open) => !open)}
