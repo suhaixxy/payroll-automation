@@ -12,7 +12,6 @@ const SELECT_COLUMNS = `
   id,
   to_char(start_date, 'YYYY-MM-DD') AS "startDate",
   to_char(end_date, 'YYYY-MM-DD') AS "endDate",
-  status,
   is_locked AS "isLocked"
 `;
 

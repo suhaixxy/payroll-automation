@@ -105,7 +105,7 @@ afterAll(async () => {
   await pool.end();
 });
 
-const asEmployee = (req) => req.set('Authorization', `Bearer ${accountingToken}`);
+const asAccounting = (req) => req.set('Authorization', `Bearer ${accountingToken}`);
 const asManager = (req) => req.set('Authorization', `Bearer ${managerToken}`);
 
 describe('RBAC and validation (§2.2, §2.6)', () => {
@@ -114,8 +114,8 @@ describe('RBAC and validation (§2.2, §2.6)', () => {
     expect(response.status).toBe(401);
   });
 
-  test('403: employee cannot read or mutate organisation-wide adjustments', async () => {
-    const create = await asEmployee(request(app).post('/api/uc003/adjustments')).send({
+  test('403: accounting may read but never mutate', async () => {
+    const create = await asAccounting(request(app).post('/api/uc003/adjustments')).send({
       staffId,
       periodId,
       adjustmentType: 'bonus',
@@ -124,8 +124,8 @@ describe('RBAC and validation (§2.2, §2.6)', () => {
     });
     expect(create.status).toBe(403);
 
-    const read = await asEmployee(request(app).get(`/api/uc003/adjustments?periodId=${periodId}`));
-    expect(read.status).toBe(403);
+    const read = await asAccounting(request(app).get(`/api/uc003/adjustments?periodId=${periodId}`));
+    expect(read.status).toBe(200);
   });
 
   test('400: bad type, >2dp amount, missing reason, unknown staff', async () => {
@@ -195,15 +195,15 @@ describe('CRUD lifecycle (§4.1–4.6)', () => {
   });
 
   test('list filters by periodId and staffId; detail returns the row', async () => {
-    const list = await asManager(request(app).get(`/api/uc003/adjustments?periodId=${periodId}`));
+    const list = await asAccounting(request(app).get(`/api/uc003/adjustments?periodId=${periodId}`));
     expect(list.body.data.adjustments).toHaveLength(2);
 
-    const byStaff = await asManager(
+    const byStaff = await asAccounting(
       request(app).get(`/api/uc003/adjustments?staffId=${staffId}&periodId=${periodId}`)
     );
     expect(byStaff.body.data.adjustments).toHaveLength(2);
 
-    const detail = await asManager(request(app).get(`/api/uc003/adjustments/${bonusId}`));
+    const detail = await asAccounting(request(app).get(`/api/uc003/adjustments/${bonusId}`));
     expect(detail.status).toBe(200);
     expect(detail.body.data.staffName).toBe('Test Adjustee');
     expect(detail.body.data.cpfApplicable).toBe(true);
@@ -223,7 +223,7 @@ describe('CRUD lifecycle (§4.1–4.6)', () => {
     const run = await asManager(request(app).post(`/api/uc003/periods/${periodId}/calculate`));
     expect(run.status).toBe(201);
 
-    const lines = await asManager(
+    const lines = await asAccounting(
       request(app).get(`/api/uc003/periods/${periodId}/lines?search=T-ADJ1`)
     );
     const line = lines.body.data.lines[0];
@@ -243,7 +243,7 @@ describe('CRUD lifecycle (§4.1–4.6)', () => {
     const response = await asManager(request(app).delete(`/api/uc003/adjustments/${deductionId}`));
     expect(response.status).toBe(204);
 
-    const list = await asManager(request(app).get(`/api/uc003/adjustments?periodId=${periodId}`));
+    const list = await asAccounting(request(app).get(`/api/uc003/adjustments?periodId=${periodId}`));
     expect(list.body.data.adjustments).toHaveLength(1);
 
     // The row still exists physically (soft delete), just flagged.
@@ -255,7 +255,7 @@ describe('CRUD lifecycle (§4.1–4.6)', () => {
 
     // Recalculate: only the bonus remains -> gross 862, net 690.
     await asManager(request(app).post(`/api/uc003/periods/${periodId}/recalculate`));
-    const lines = await asManager(
+    const lines = await asAccounting(
       request(app).get(`/api/uc003/periods/${periodId}/lines?search=T-ADJ1`)
     );
     expect(lines.body.data.lines[0].grossTotal).toBe('862.00');
