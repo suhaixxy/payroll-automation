@@ -21,6 +21,7 @@ function configureDatabase({ staffById = {}, staffByName = {}, summaryRows = [],
   pool.query.mockImplementation(async (sql, params) => {
     if (sql.includes("FROM staff WHERE external_ref")) return { rows: staffById[params[0]] ? [staffById[params[0]]] : [] };
     if (sql.includes("FROM staff WHERE lower(full_name)")) return { rows: staffByName[params[0].toLowerCase()] ? [staffByName[params[0].toLowerCase()]] : [] };
+    if (sql.includes("FROM timesheet t")) return { rows: summaryCall++ === 0 ? [] : summaryRows };
     if (sql.includes("resolved_manually = true")) {
       return {
         rows: sql.includes("to_char(shift_date, 'YYYY-MM-DD') AS shift_date")
@@ -28,7 +29,6 @@ function configureDatabase({ staffById = {}, staffByName = {}, summaryRows = [],
           : resolvedRows,
       };
     }
-    if (sql.includes("FROM timesheet t")) return { rows: summaryCall++ === 0 ? [] : summaryRows };
     throw new Error(`Unexpected pool query: ${sql}`);
   });
 }
@@ -44,6 +44,8 @@ beforeEach(() => {
     id: payPeriodId,
     startDate: "2026-08-01",
     endDate: "2026-08-14",
+    status: "draft",
+    isLocked: false,
   });
 });
 
@@ -59,6 +61,26 @@ describe("calculateHours", () => {
 });
 
 describe("runRosterSync", () => {
+  test.each([
+    ["validated", false],
+    ["approved", true],
+    ["paid", true],
+  ])("rejects a non-editable %s period", async (status, isLocked) => {
+    payPeriodService.getPayPeriod.mockResolvedValue({
+      id: payPeriodId,
+      startDate: "2026-08-01",
+      endDate: "2026-08-14",
+      status,
+      isLocked,
+    });
+
+    await expect(runRosterSync(payPeriodId)).rejects.toMatchObject({
+      status: 409,
+      code: "PAY_PERIOD_NOT_EDITABLE",
+    });
+    expect(fetchRosterRows).not.toHaveBeenCalled();
+  });
+
   test("matches a staff member by staff ID before checking their name", async () => {
     configureDatabase({
       staffById: { S007: { id: "staff-7", staffId: "S007", fullName: "Farah Yusof", status: "active" } },
@@ -196,7 +218,7 @@ describe("resolveException", () => {
     const timesheetRowId = "22222222-2222-2222-2222-222222222222";
     const staffId = "33333333-3333-3333-3333-333333333333";
     pool.query
-      .mockResolvedValueOnce({ rows: [{ id: timesheetRowId, match_status: "unmatched", is_frozen: false }] })
+      .mockResolvedValueOnce({ rows: [{ id: timesheetRowId, match_status: "unmatched", is_frozen: false, pay_period_status: "draft", is_locked: false }] })
       .mockResolvedValueOnce({ rows: [{ id: staffId }] })
       .mockResolvedValueOnce({ rows: [] });
 
@@ -209,7 +231,7 @@ describe("resolveException", () => {
   test("updates clock times for an invalid-time row", async () => {
     const timesheetRowId = "22222222-2222-2222-2222-222222222222";
     pool.query
-      .mockResolvedValueOnce({ rows: [{ id: timesheetRowId, match_status: "invalid_time", is_frozen: false }] })
+      .mockResolvedValueOnce({ rows: [{ id: timesheetRowId, match_status: "invalid_time", is_frozen: false, pay_period_status: "draft", is_locked: false }] })
       .mockResolvedValueOnce({ rows: [] });
 
     const result = await resolveException(timesheetRowId, { clockIn: "08:30", clockOut: "17:00" });
@@ -221,7 +243,7 @@ describe("resolveException", () => {
   test("permanently ignores an exception row", async () => {
     const timesheetRowId = "22222222-2222-2222-2222-222222222222";
     pool.query
-      .mockResolvedValueOnce({ rows: [{ id: timesheetRowId, match_status: "unmatched", is_frozen: false }] })
+      .mockResolvedValueOnce({ rows: [{ id: timesheetRowId, match_status: "unmatched", is_frozen: false, pay_period_status: "draft", is_locked: false }] })
       .mockResolvedValueOnce({ rows: [] });
 
     const result = await resolveException(timesheetRowId, { ignore: true });
@@ -232,7 +254,7 @@ describe("resolveException", () => {
 
   test("rejects resolving a frozen timesheet row", async () => {
     const timesheetRowId = "22222222-2222-2222-2222-222222222222";
-    pool.query.mockResolvedValueOnce({ rows: [{ id: timesheetRowId, match_status: "unmatched", is_frozen: true }] });
+    pool.query.mockResolvedValueOnce({ rows: [{ id: timesheetRowId, match_status: "unmatched", is_frozen: true, pay_period_status: "draft", is_locked: false }] });
 
     const result = await resolveException(timesheetRowId, { ignore: true });
 
@@ -246,7 +268,7 @@ describe("undoException", () => {
 
   test("reverts a staff-link resolution", async () => {
     pool.query
-      .mockResolvedValueOnce({ rows: [{ id: timesheetRowId, match_status: "matched", is_frozen: false, clock_in: null, total_hours: 8 }] })
+      .mockResolvedValueOnce({ rows: [{ id: timesheetRowId, match_status: "matched", is_frozen: false, clock_in: null, total_hours: 8, pay_period_status: "draft", is_locked: false }] })
       .mockResolvedValueOnce({ rows: [] });
 
     const result = await undoException(timesheetRowId);
@@ -257,7 +279,7 @@ describe("undoException", () => {
 
   test("reverts a clock-time fix", async () => {
     pool.query
-      .mockResolvedValueOnce({ rows: [{ id: timesheetRowId, match_status: "matched", is_frozen: false, clock_in: "08:30", total_hours: 8.5 }] })
+      .mockResolvedValueOnce({ rows: [{ id: timesheetRowId, match_status: "matched", is_frozen: false, clock_in: "08:30", total_hours: 8.5, pay_period_status: "draft", is_locked: false }] })
       .mockResolvedValueOnce({ rows: [] });
 
     const result = await undoException(timesheetRowId);
@@ -271,7 +293,7 @@ describe("undoException", () => {
     [8, "unmatched"],
   ])("reverts an ignored %s-hour row to %s", async (totalHours, expectedStatus) => {
     pool.query
-      .mockResolvedValueOnce({ rows: [{ id: timesheetRowId, match_status: "ignored", is_frozen: false, clock_in: null, total_hours: totalHours }] })
+      .mockResolvedValueOnce({ rows: [{ id: timesheetRowId, match_status: "ignored", is_frozen: false, clock_in: null, total_hours: totalHours, pay_period_status: "draft", is_locked: false }] })
       .mockResolvedValueOnce({ rows: [] });
 
     const result = await undoException(timesheetRowId);
@@ -281,7 +303,7 @@ describe("undoException", () => {
   });
 
   test("rejects undoing a frozen row", async () => {
-    pool.query.mockResolvedValueOnce({ rows: [{ id: timesheetRowId, match_status: "ignored", is_frozen: true, clock_in: null, total_hours: 8 }] });
+    pool.query.mockResolvedValueOnce({ rows: [{ id: timesheetRowId, match_status: "ignored", is_frozen: true, clock_in: null, total_hours: 8, pay_period_status: "draft", is_locked: false }] });
 
     const result = await undoException(timesheetRowId);
 

@@ -10,10 +10,16 @@ export function formatMoney(value) {
   });
 }
 
-// Reason codes the UI can act on today: a missing performance input is
-// resolved right here via the Resolve button (§5.8). MISSING_PAY_RATE waits
-// on the pay-rate ownership decision (§3.3); the hours codes are UC-002's.
-const RESOLVABLE = ['MISSING_PERFORMANCE_INPUT'];
+// Route each incomplete reason to the workflow that owns its source data.
+// Missing performance data is resolved here; hours belong to UC-002, staff
+// details to Staff Management, and pay-rate setup has no dedicated UI yet.
+export function getIncompleteAction(line) {
+  const codes = new Set((line.incompleteReasons || []).map((reason) => reason.code));
+  if (codes.has('MISSING_PERFORMANCE_INPUT')) return 'performance-input';
+  if (codes.has('NO_HOURS_RECORDED') || codes.has('INVALID_HOURS')) return 'timesheets';
+  if (codes.has('MISSING_DATE_OF_BIRTH')) return 'staff';
+  return null;
+}
 
 // Column key → the server-side sort key it maps to (runService.LINE_SORTS).
 // Columns without an entry simply aren't sortable.
@@ -32,7 +38,7 @@ function SortableHeader({ label, sortKey, sort, dir, onSort, numeric }) {
   );
 }
 
-function PayrollLineTable({ lines, onResolve, onShowBreakdown, sort, dir, onSort, filtered, canMutate, onEditLine, onDeleteLine }) {
+function PayrollLineTable({ lines, onResolve, onReviewTimesheets, onReviewStaff, onShowBreakdown, sort, dir, onSort, filtered, canMutate, onEditLine, onDeleteLine }) {
   if (!lines || lines.length === 0) {
     return (
       <p className="empty-state">
@@ -53,6 +59,7 @@ function PayrollLineTable({ lines, onResolve, onShowBreakdown, sort, dir, onSort
             <th>Type</th>
             <th className="numeric">Hours Gross</th>
             <th className="numeric">Incentive</th>
+            <th className="numeric">Adjustments</th>
             <SortableHeader label="Gross Total" sortKey="gross" sort={sort} dir={dir} onSort={onSort} numeric />
             <th className="numeric">CPF (Employee)</th>
             <th className="numeric">CPF (Employer)</th>
@@ -64,13 +71,16 @@ function PayrollLineTable({ lines, onResolve, onShowBreakdown, sort, dir, onSort
           </tr>
         </thead>
         <tbody>
-          {lines.map((line) => (
+          {lines.map((line) => {
+            const incompleteAction = getIncompleteAction(line);
+            return (
             <tr key={line.id}>
               <td>{line.externalRef}</td>
               <td>{line.staffName}</td>
               <td>{line.employmentType === 'full_time' ? 'Full-time' : 'Part-time'}</td>
               <td className="numeric">{formatMoney(line.grossFromHours)}</td>
               <td className="numeric">{formatMoney(line.incentiveAmount)}</td>
+              <td className="numeric">{formatMoney(line.adjustmentsTotal)}</td>
               <td className="numeric">{formatMoney(line.grossTotal)}</td>
               <td className="numeric">
                 {line.cpfEligible === false ? (
@@ -103,15 +113,22 @@ function PayrollLineTable({ lines, onResolve, onShowBreakdown, sort, dir, onSort
                     {reason.message}
                   </div>
                 ))}
-                {onResolve &&
-                  line.lineStatus === 'incomplete' &&
-                  (line.incompleteReasons || []).some((reason) => RESOLVABLE.includes(reason.code)) && (
+                {line.lineStatus === 'incomplete' && incompleteAction === 'performance-input' && onResolve && (
                     <div>
                       <button type="button" onClick={() => onResolve(line)}>
-                        Resolve
+                        Add Performance Input
                       </button>
                     </div>
                   )}
+                {line.lineStatus === 'incomplete' && incompleteAction === 'timesheets' && onReviewTimesheets && (
+                  <div><button type="button" onClick={onReviewTimesheets}>Review Timesheets</button></div>
+                )}
+                {line.lineStatus === 'incomplete' && incompleteAction === 'staff' && onReviewStaff && (
+                  <div><button type="button" onClick={onReviewStaff}>Review Staff</button></div>
+                )}
+                {line.lineStatus === 'incomplete' && !incompleteAction && (
+                  <div className="line-note">Fix the source payroll data, then recalculate.</div>
+                )}
               </td>
               {onShowBreakdown && (
                 <td>
@@ -132,7 +149,7 @@ function PayrollLineTable({ lines, onResolve, onShowBreakdown, sort, dir, onSort
                 </td>
               )}
             </tr>
-          ))}
+          );})}
         </tbody>
       </table>
     </div>

@@ -14,13 +14,19 @@ const unresolvedStatuses = ["open", "returned"];
 
 async function ensurePeriod(payPeriodId) {
   const { rows } = await pool.query(
-    `SELECT id, start_date, end_date, status, validated_at
+    `SELECT id, start_date, end_date, status, validated_at, is_locked
      FROM pay_period
      WHERE id = $1`,
     [payPeriodId]
   );
   if (!rows[0]) throw new AppError(404, "PAY_PERIOD_NOT_FOUND", "The selected pay period does not exist.");
   return rows[0];
+}
+
+function assertEditablePeriod(period) {
+  if (period.status !== "draft" || period.is_locked) {
+    throw new AppError(409, "PAY_PERIOD_NOT_EDITABLE", "This pay period is locked or no longer editable.");
+  }
 }
 
 async function listPeriods() {
@@ -61,7 +67,8 @@ async function getTimesheetRows(payPeriodId) {
 }
 
 async function runValidation(payPeriodId, context = {}) {
-  await ensurePeriod(payPeriodId);
+  const period = await ensurePeriod(payPeriodId);
+  assertEditablePeriod(period);
   const timesheets = await getTimesheetRows(payPeriodId);
   const { rows: staff } = await pool.query(
     `SELECT id,
@@ -257,13 +264,16 @@ async function getReview(payPeriodId) {
 
 async function resolveException(exceptionId, payload, context = {}) {
   const { rows } = await pool.query(
-    `SELECT id, pay_period_id, timesheet_id, rule_type
-     FROM timesheet_exception
-     WHERE id = $1`,
+    `SELECT e.id, e.pay_period_id, e.timesheet_id, e.rule_type,
+            p.status AS pay_period_status, p.is_locked
+     FROM timesheet_exception e
+     JOIN pay_period p ON p.id = e.pay_period_id
+     WHERE e.id = $1`,
     [exceptionId]
   );
   const exception = rows[0];
   if (!exception) throw new AppError(404, "EXCEPTION_NOT_FOUND", "The validation exception does not exist.");
+  assertEditablePeriod({ status: exception.pay_period_status, is_locked: exception.is_locked });
 
   const { resolution, correctedHours, note } = payload;
   if (resolution === "corrected" && exception.timesheet_id) {
@@ -300,7 +310,8 @@ async function resolveException(exceptionId, payload, context = {}) {
 }
 
 async function bulkResolveExceptions(payPeriodId, { ruleType, note }, context = {}) {
-  await ensurePeriod(payPeriodId);
+  const period = await ensurePeriod(payPeriodId);
+  assertEditablePeriod(period);
   const result = await pool.query(
     `UPDATE timesheet_exception
      SET status = 'noted',
@@ -327,6 +338,7 @@ async function bulkResolveExceptions(payPeriodId, { ruleType, note }, context = 
 
 async function markValidated(payPeriodId, context = {}) {
   const period = await ensurePeriod(payPeriodId);
+  assertEditablePeriod(period);
   const { rows } = await pool.query(
     `SELECT COUNT(*)::int AS count
      FROM timesheet_exception

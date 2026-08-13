@@ -98,7 +98,7 @@ async function apiPost(path, body, { allowStatuses = [] } = {}) {
   const payload = await response.json();
 
   if (!response.ok && !allowStatuses.includes(response.status)) {
-    throw new Error(`API POST ${path} failed: ${response.status}`);
+    throw new Error(payload?.error?.message || payload?.message || `API POST ${path} failed: ${response.status}`);
   }
 
   return payload;
