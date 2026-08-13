@@ -170,6 +170,22 @@ async function runRosterSync(payPeriodId, actor = "manual") {
     // Replace the draft for this period. Rows already frozen by UC-002
     // validation are left alone, so a re-sync can never overwrite a
     // validated snapshot.
+    //
+    // UC-002 may have attached timesheet_exception rows to the draft rows
+    // we're about to replace (open findings, or a manager's corrected/noted
+    // resolution). timesheet_exception.timesheet_id has no ON DELETE
+    // CASCADE, so those must be cleared first or the DELETE below fails
+    // with a foreign key violation. The exceptions describe a snapshot
+    // that's being replaced anyway — re-running validation regenerates
+    // whatever's still valid.
+    await client.query(
+      `DELETE FROM timesheet_exception
+       WHERE timesheet_id IN (
+         SELECT id FROM timesheet
+         WHERE pay_period_id = $1 AND is_frozen = false AND resolved_manually = false
+       )`,
+      [payPeriodId]
+    );
     await client.query("DELETE FROM timesheet WHERE pay_period_id = $1 AND is_frozen = false AND resolved_manually = false", [payPeriodId]);
 
     for (const shift of matchedShifts) {
@@ -474,6 +490,16 @@ async function undoException(timesheetRowId) {
 }
 
 async function resetPeriodResolutions(payPeriodId) {
+  // Same FK constraint as the delete in runRosterSync: clear any
+  // timesheet_exception rows attached to the resolved timesheet rows
+  // before deleting them, or Postgres refuses the delete.
+  await pool.query(
+    `DELETE FROM timesheet_exception
+     WHERE timesheet_id IN (
+       SELECT id FROM timesheet WHERE pay_period_id = $1 AND resolved_manually = true
+     )`,
+    [payPeriodId]
+  );
   await pool.query(
     "DELETE FROM timesheet WHERE pay_period_id = $1 AND resolved_manually = true",
     [payPeriodId]
