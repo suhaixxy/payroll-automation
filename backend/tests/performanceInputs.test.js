@@ -95,11 +95,11 @@ afterAll(async () => {
   await pool.end();
 });
 
-const asAccounting = (req) => req.set('Authorization', `Bearer ${accountingToken}`);
+const asEmployee = (req) => req.set('Authorization', `Bearer ${accountingToken}`);
 const asManager = (req) => req.set('Authorization', `Bearer ${managerToken}`);
 
 async function fetchLine() {
-  const lines = await asAccounting(
+  const lines = await asManager(
     request(app).get(`/api/uc003/periods/${periodId}/lines?search=T-PI1`)
   );
   return lines.body.data.lines[0];
@@ -110,7 +110,7 @@ describe('RBAC and validation (§2.2, §2.6)', () => {
     const anonymous = await request(app).get('/api/uc003/performance-inputs');
     expect(anonymous.status).toBe(401);
 
-    const create = await asAccounting(request(app).post('/api/uc003/performance-inputs')).send({
+    const create = await asEmployee(request(app).post('/api/uc003/performance-inputs')).send({
       staffId,
       periodId,
       inputType: 'sessions',
@@ -118,6 +118,8 @@ describe('RBAC and validation (§2.2, §2.6)', () => {
       unitValue: 1,
     });
     expect(create.status).toBe(403);
+    const list = await asEmployee(request(app).get('/api/uc003/performance-inputs'));
+    expect(list.status).toBe(403);
   });
 
   test('400: negative quantity, 3-decimal unit value, bad input type', async () => {
@@ -214,7 +216,7 @@ describe('CRUD lifecycle (§5.1 checkpoint rules)', () => {
     const removed = await asManager(request(app).delete(`/api/uc003/performance-inputs/${inputId}`));
     expect(removed.status).toBe(204);
 
-    const list = await asAccounting(
+    const list = await asManager(
       request(app).get(`/api/uc003/performance-inputs?periodId=${periodId}`)
     );
     expect(list.body.data.performanceInputs).toHaveLength(0);

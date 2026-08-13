@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import {
   getAccessToken,
@@ -39,6 +39,7 @@ const DEFAULT_LINE_QUERY = { search: '', status: '', sort: 'ref', dir: 'asc', pa
 // triggered it.
 function PayrollCalcPage() {
   const { user, signOut } = useAuth();
+  const navigate = useNavigate();
   const [payPeriods, setPayPeriods] = useState([]);
   const [selectedPeriodId, setSelectedPeriodId] = useState('');
   const [summary, setSummary] = useState(null); // { period, run, variance... }
@@ -357,7 +358,10 @@ function PayrollCalcPage() {
   const canCalculate = periodStatus === PAYROLL_STATUS.VALIDATED;
   const canRecalculate =
     periodStatus === PAYROLL_STATUS.CALCULATED || periodStatus === PAYROLL_STATUS.PENDING_APPROVAL;
-  const canSubmit = periodStatus === PAYROLL_STATUS.CALCULATED && user?.role === 'manager';
+  const canSubmit =
+    periodStatus === PAYROLL_STATUS.CALCULATED &&
+    user?.role === 'manager' &&
+    run?.linesIncomplete === 0;
 
   const hasFilters = Boolean(lineQuery.search || lineQuery.status);
   const totalLines = linesMeta?.total ?? 0;
@@ -710,6 +714,8 @@ function PayrollCalcPage() {
             onSort={handleSort}
             onShowBreakdown={(line) => setBreakdownLineId(line.id)}
             onResolve={user?.role === 'manager' ? handleResolve : undefined}
+            onReviewTimesheets={user?.role === 'manager' ? () => navigate('/timesheets') : undefined}
+            onReviewStaff={user?.role === 'manager' ? () => navigate('/staff') : undefined}
             canMutate={!periodLocked && user?.role === 'manager'}
             onEditLine={startEditLine}
             onDeleteLine={handleLineDelete}

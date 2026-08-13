@@ -6,10 +6,10 @@ Payroll Automation uses a three-tier web architecture. A React/Vite single-page 
 
 ```mermaid
 flowchart LR
-    M[Payroll Manager] --> F[React + Vite frontend]
+    M[Payroll Manager] --> F[Vercel — React + Vite frontend]
     E[Employee] --> F
-    F -->|HTTPS / REST JSON, CSV, PDF| A[Node.js + Express API]
-    A -->|Sequelize and pg| D[(PostgreSQL)]
+    F -->|HTTPS / REST JSON, CSV, PDF| A[Render — Node.js + Express API]
+    A -->|Sequelize and pg| D[(Neon PostgreSQL)]
     G[Published roster CSV] -->|UC-001 import| A
     A -->|UC-005 mock sync| H[Mock HRMS]
 
@@ -18,9 +18,9 @@ flowchart LR
       U2 --> U3[UC-003 Calculation]
       U3 --> U4[UC-004 Approval + Lock]
       U4 --> U5[UC-005 Payment Readiness]
-      U5 --> PB[Payment Batch + CSV/GIRO]
+      U5 --> PB[Payment Batch + CSV/GIRO generated output]
       PB --> HS[Mock HRMS Sync]
-      HS --> PS[Payslips]
+      HS --> PS[Payslips / PDF generated output]
     end
 
     A --- Workflow
@@ -80,7 +80,7 @@ Success response shapes are endpoint-specific because integrated controllers com
 
 ## 6. Database Architecture
 
-The 20 retained SQL migrations form an incremental compatibility history. Current logical entity groups are:
+The 22 retained SQL migrations form an incremental compatibility history. Current logical entity groups are:
 
 | Group | Important canonical entities |
 | --- | --- |
@@ -111,7 +111,7 @@ The project does not claim encryption at rest; production database security is t
 
 `backend/tests/` is the authoritative Jest root. Supertest exercises the Express API, while unit and integration suites cover calculation and infrastructure behavior. Member folders under root `tests/` are individual evidence and are excluded from Jest discovery.
 
-`backend/scripts/run-tests.js` obtains an administrative PostgreSQL connection, creates a uniquely named `payroll_jest_test_*` database, applies all migrations and six seeds, runs Jest serially and drops the database in `finally`. Guards reject an empty name, a non-owned name or the protected `payroll_automation` database.
+`backend/scripts/run-tests.js` obtains an administrative PostgreSQL connection, creates a uniquely named `payroll_jest_test_*` database, applies all migrations and all eight automatically executed SQL seed files, runs Jest serially and drops the database in `finally`. The original integrated seed set contained six files; `011_uc001_roster_expanded.sql` and `060_uc004_demo_pending.sql` were integrated later and are now included automatically by `npm run seed`. Guards reject an empty name, a non-owned name or the protected `payroll_automation` database.
 
 Current verified result: **20 suites, 183 tests, 0 failures, 0 skipped/todo**. The committed coverage collection is broader and UC-003-oriented, so its global threshold can fail even when every test passes; this is separate from functional suite status and individual evidence.
 
@@ -129,16 +129,25 @@ The backend also exposes `/health` and `/api/health`. The roster adapter reads `
 
 ## 10. Deployment Architecture
 
-Deployment has not yet occurred. The intended architecture is:
+The production system is deployed from the `main` branch using this architecture:
 
 ```text
-Users -> Vercel static frontend -> Render Node/Express service
-                                      |-> managed PostgreSQL (SSL)
-                                      |-> published roster CSV
-                                      `-> mock HRMS adapter
+Payroll Manager / Employee
+    -> Vercel — React/Vite frontend
+    -> HTTPS REST API
+    -> Render — Node.js/Express backend
+         |-> Neon PostgreSQL
+         |<- published roster CSV (UC-001 input)
+         |-> CSV/GIRO payment files (generated on demand)
+         |-> Mock HRMS (UC-005 integration)
+         `-> payslip PDFs (generated on demand)
 ```
 
-The equivalent providers may be changed before deployment. The frontend needs the public backend origin at build time; the backend needs the final frontend origin for CORS, a managed `DATABASE_URL`, a strong JWT secret and production mode. Migrations must run against the managed database before traffic. Seeds should be loaded only if demonstration data is intentionally required. No public URL or completed smoke test is claimed yet.
+The frontend is deployed on Vercel at [https://payroll-automation-three.vercel.app](https://payroll-automation-three.vercel.app/) and the backend is deployed on Render at [https://payroll-automation-zekw.onrender.com](https://payroll-automation-zekw.onrender.com/). PostgreSQL is hosted on Neon. The Render [`/health`](https://payroll-automation-zekw.onrender.com/health) endpoint verifies backend and database connectivity and has returned `{"status":"ok","database":"connected"}` in production.
+
+Render uses its environment-provided port. Local development continues to use Vite on `5173`, Express on `5000`, and PostgreSQL on `5432`; production users access the provider HTTPS URLs rather than those local ports.
+
+CSV/GIRO payment files and payslip PDFs are generated on demand. The implemented design does not require Cloudinary, Google Drive, or another external persistent file-storage service, and the generated outputs are not represented as cloud-stored assets.
 
 ## 11. Key Design Decisions
 
