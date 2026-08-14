@@ -40,6 +40,7 @@ router.get('/lines/:lineId', uc003Controller.line);
 router.post('/periods/:periodId/lines', uc003Controller.createLine);
 router.patch('/lines/:lineId', uc003Controller.updateLine);
 router.delete('/lines/:lineId', uc003Controller.deleteLine);
+router.post('/lines/:lineId/resolve', uc003Controller.resolveLine);
 
 // Edit history — recent edits across all entities, and per-entity trail.
 router.get('/edit-log/recent', uc003Controller.recentEdits);

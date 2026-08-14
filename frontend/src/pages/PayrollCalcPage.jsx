@@ -14,6 +14,7 @@ import {
   createPayrollLine,
   updatePayrollLine,
   deletePayrollLine,
+  resolvePayrollLine,
   fetchUc003Staff,
   fetchRecentEdits,
 } from '../api/client';
@@ -311,6 +312,19 @@ function PayrollCalcPage() {
   function handleResolve(line) {
     setResolveStaffId(line.staffId);
     setActiveTab('inputs');
+  }
+
+  // §5.8: Resolve an incomplete line directly (for hours/pay-rate issues).
+  async function handleResolveLine(line, note) {
+    const result = await resolvePayrollLine(line.id, note);
+    if (sessionExpired(result)) return;
+    if (!result.ok) {
+      setErrorMessage(result.data?.error?.message || 'Resolve failed.');
+      return false;
+    }
+    refreshLines();
+    loadSummary(selectedPeriodId);
+    return true;
   }
 
   // After the resolving input is saved: recalculate so the line turns
@@ -714,6 +728,7 @@ function PayrollCalcPage() {
             onSort={handleSort}
             onShowBreakdown={(line) => setBreakdownLineId(line.id)}
             onResolve={user?.role === 'manager' ? handleResolve : undefined}
+            onResolveLine={user?.role === 'manager' ? handleResolveLine : undefined}
             onReviewTimesheets={user?.role === 'manager' ? () => navigate('/timesheets') : undefined}
             onReviewStaff={user?.role === 'manager' ? () => navigate('/staff') : undefined}
             canMutate={!periodLocked && user?.role === 'manager'}

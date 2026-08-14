@@ -290,6 +290,13 @@ export function deletePayrollLine(lineId) {
   });
 }
 
+export function resolvePayrollLine(lineId, note) {
+  return authedFetch(`/api/uc003/lines/${encodeURIComponent(lineId)}/resolve`, {
+    method: "POST",
+    body: JSON.stringify({ note }),
+  });
+}
+
 // Edit history audit trail.
 export function fetchEditHistory(entityType, entityId) {
   return authedFetch(`/api/uc003/edit-log/${encodeURIComponent(entityType)}/${encodeURIComponent(entityId)}`);
