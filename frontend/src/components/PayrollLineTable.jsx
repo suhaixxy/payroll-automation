@@ -15,73 +15,6 @@ export function formatMoney(value) {
 // on the pay-rate ownership decision (§3.3); the hours codes are UC-002's.
 const RESOLVABLE = ['MISSING_PERFORMANCE_INPUT'];
 
-// Reason codes that can be resolved directly from the payroll calc page
-// via a resolve dialog (add a note, mark as acceptable).
-const RESOLVABLE_VIA_DIALOG = [
-  'NO_HOURS_RECORDED',
-  'INVALID_HOURS',
-  'MISSING_PAY_RATE',
-  'MISSING_DATE_OF_BIRTH',
-];
-
-function ResolveLineDialog({ open, line, loading, onClose, onSubmit }) {
-  const [note, setNote] = useState('');
-
-  React.useEffect(() => {
-    if (open) {
-      setNote('');
-    }
-  }, [open, line]);
-
-  if (!open || !line) return null;
-
-  const handleSubmit = () => {
-    onSubmit({ note: note.trim() });
-  };
-
-  return (
-    <div className="resolve-modal-overlay" onClick={loading ? undefined : onClose}>
-      <div className="resolve-modal" onClick={(e) => e.stopPropagation()}>
-        <div className="resolve-modal-header">
-          <h3>Resolve incomplete line</h3>
-        </div>
-        <div className="resolve-modal-body">
-          <p><strong>{line.staffName}</strong> ({line.externalRef})</p>
-          <div className="resolve-reasons">
-            {(line.incompleteReasons || [])
-              .filter((reason) => RESOLVABLE_VIA_DIALOG.includes(reason.code))
-              .map((reason, idx) => (
-                <div key={idx} className="resolve-reason-item">
-                  <span className="badge badge-warning">
-                    <span className="badge-dot" />
-                    {reason.code.replace(/_/g, ' ')}
-                  </span>
-                  <p className="resolve-reason-message">{reason.message}</p>
-                </div>
-              ))}
-          </div>
-          <div className="field-row" style={{ flexDirection: 'column', alignItems: 'stretch' }}>
-            <label htmlFor="resolve-note">Resolution note</label>
-            <textarea
-              id="resolve-note"
-              placeholder="Add a note explaining why this is acceptable or what action was taken..."
-              value={note}
-              onChange={(e) => setNote(e.target.value)}
-              rows={4}
-            />
-          </div>
-        </div>
-        <div className="resolve-modal-footer">
-          <button type="button" onClick={onClose} disabled={loading}>Cancel</button>
-          <button type="button" className="primary" onClick={handleSubmit} disabled={loading || !note.trim()}>
-            {loading ? 'Resolving…' : 'Resolve'}
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 // Column key → the server-side sort key it maps to (runService.LINE_SORTS).
 // Columns without an entry simply aren't sortable.
 function SortableHeader({ label, sortKey, sort, dir, onSort, numeric }) {
@@ -99,32 +32,7 @@ function SortableHeader({ label, sortKey, sort, dir, onSort, numeric }) {
   );
 }
 
-function PayrollLineTable({ lines, onResolve, onResolveLine, onReviewTimesheets, onReviewStaff, onShowBreakdown, sort, dir, onSort, filtered, canMutate, onEditLine, onDeleteLine }) {
-  const [resolveDialogOpen, setResolveDialogOpen] = useState(false);
-  const [resolveLine, setResolveLine] = useState(null);
-  const [resolveLoading, setResolveLoading] = useState(false);
-
-  const handleOpenResolveDialog = (line) => {
-    setResolveLine(line);
-    setResolveDialogOpen(true);
-  };
-
-  const handleCloseResolveDialog = () => {
-    setResolveDialogOpen(false);
-    setResolveLine(null);
-  };
-
-  const handleSubmitResolveDialog = async ({ note }) => {
-    if (!resolveLine || !onResolveLine) return;
-    setResolveLoading(true);
-    try {
-      await onResolveLine(resolveLine, note);
-      handleCloseResolveDialog();
-    } finally {
-      setResolveLoading(false);
-    }
-  };
-
+function PayrollLineTable({ lines, onResolve, onReviewTimesheets, onReviewStaff, onShowBreakdown, sort, dir, onSort, filtered, canMutate, onEditLine, onDeleteLine }) {
   if (!lines || lines.length === 0) {
     return (
       <p className="empty-state">
@@ -200,6 +108,7 @@ function PayrollLineTable({ lines, onResolve, onResolveLine, onReviewTimesheets,
                   (line.incompleteReasons || []).some((reason) => RESOLVABLE.includes(reason.code)) && (
                     <div>
                       <button type="button" onClick={() => onResolve(line)}>
+<<<<<<< Updated upstream
                         Resolve
                       </button>
                     </div>
@@ -208,12 +117,19 @@ function PayrollLineTable({ lines, onResolve, onResolveLine, onReviewTimesheets,
                   (line.incompleteReasons || []).some((reason) => RESOLVABLE_VIA_DIALOG.includes(reason.code)) && onResolveLine && (
                     <div>
                       <button type="button" onClick={() => handleOpenResolveDialog(line)}>
+=======
+>>>>>>> Stashed changes
                         Resolve
                       </button>
                     </div>
-                  )
+                  )}
+                {line.lineStatus === 'incomplete' && incompleteAction === 'timesheets' && onReviewTimesheets && (
+                  <div><button type="button" onClick={onReviewTimesheets}>Review Timesheets</button></div>
                 )}
-                {line.lineStatus === 'incomplete' && !incompleteAction && !(line.incompleteReasons || []).some((reason) => RESOLVABLE_VIA_DIALOG.includes(reason.code)) && (
+                {line.lineStatus === 'incomplete' && incompleteAction === 'staff' && onReviewStaff && (
+                  <div><button type="button" onClick={onReviewStaff}>Review Staff</button></div>
+                )}
+                {line.lineStatus === 'incomplete' && !incompleteAction && (
                   <div className="line-note">Fix the source payroll data, then recalculate.</div>
                 )}
               </td>
