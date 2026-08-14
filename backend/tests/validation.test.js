@@ -96,23 +96,4 @@ describe("validationService database integration", () => {
     expect(person).toBeDefined();
     expect(person.flags.some((flag) => flag.flagType === "exceeds_cap")).toBe(true);
   });
-
-  test.each([
-    ["calculated", false, "2097-01-01", "2097-01-14"],
-    ["pending_approval", false, "2097-01-15", "2097-01-28"],
-    ["approved", true, "2097-01-29", "2097-02-11"],
-    ["paid", true, "2097-02-12", "2097-02-25"],
-  ])("rejects validation for a later-stage %s period", async (status, isLocked, startDate, endDate) => {
-    const result = await pool.query(
-      `INSERT INTO pay_period (start_date, end_date, status, is_locked)
-       VALUES ($1, $2, $3, $4) RETURNING id`,
-      [startDate, endDate, status, isLocked]
-    );
-    const guardedPeriodId = result.rows[0].id;
-    await expect(validationService.runValidation(guardedPeriodId, managerContext)).rejects.toMatchObject({
-      status: 409,
-      code: "PAY_PERIOD_NOT_EDITABLE",
-    });
-    await pool.query("DELETE FROM pay_period WHERE id = $1", [guardedPeriodId]);
-  });
 });

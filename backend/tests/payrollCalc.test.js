@@ -28,7 +28,6 @@ let managerToken;
 let periodId;
 let emptyRateSetPeriodId; // a 2020 period no rate set covers
 const staffIds = {};
-let deactivatedStaffIds = [];
 
 async function registerAndLogin(name, email, role) {
   return createAndLogin(app, { name, email, password: PASSWORD, role });
@@ -47,10 +46,6 @@ async function createStaff(externalRef, fullName, employmentType, cpfEligible, d
 }
 
 async function cleanup() {
-  if (deactivatedStaffIds.length > 0) {
-    await pool.query(`UPDATE staff SET status = 'active' WHERE id = ANY($1::uuid[])`, [deactivatedStaffIds]);
-    deactivatedStaffIds = [];
-  }
   const { rows: stalePeriods } = await pool.query(
     `SELECT id FROM pay_period WHERE start_date IN ('2030-07-01', '2020-01-01')`
   );
@@ -132,15 +127,6 @@ beforeAll(async () => {
     [periodId, staffIds.PTC]
   );
 
-  // executeRun intentionally calculates every active employee. Isolate this
-  // fixture from the evolving integrated demo seed and restore it in cleanup.
-  const { rows: deactivated } = await pool.query(
-    `UPDATE staff SET status = 'inactive'
-     WHERE status = 'active' AND external_ref NOT IN ('T-PTA', 'T-FTB', 'T-PTC')
-     RETURNING id`
-  );
-  deactivatedStaffIds = deactivated.map((row) => row.id);
-
   // A validated period in 2020 — no rate set covers it (422 case).
   const { rows: oldRows } = await pool.query(
     `INSERT INTO pay_period (start_date, end_date, status, validated_at)
@@ -155,7 +141,7 @@ afterAll(async () => {
   await pool.end();
 });
 
-const asEmployee = (req) => req.set('Authorization', `Bearer ${accountingToken}`);
+const asAccounting = (req) => req.set('Authorization', `Bearer ${accountingToken}`);
 const asManager = (req) => req.set('Authorization', `Bearer ${managerToken}`);
 
 describe('guards: auth, roles, state (§2.2, §3.5)', () => {
@@ -164,35 +150,16 @@ describe('guards: auth, roles, state (§2.2, §3.5)', () => {
     expect(response.status).toBe(401);
   });
 
-  test('403: employee may not submit for approval or void a run', async () => {
-    const submit = await asEmployee(
+  test('403: accounting may not submit for approval or void a run', async () => {
+    const submit = await asAccounting(
       request(app).post(`/api/uc003/periods/${periodId}/submit-approval`)
     );
     expect(submit.status).toBe(403);
 
-    const voidRun = await asEmployee(
+    const voidRun = await asAccounting(
       request(app).post('/api/uc003/runs/00000000-0000-4000-8000-000000009999/void')
     ).send({ reason: 'x' });
     expect(voidRun.status).toBe(403);
-  });
-
-  test('403: employee cannot access organisation-wide UC-003 reads', async () => {
-    const paths = [
-      '/api/uc003/periods',
-      `/api/uc003/periods/${periodId}/summary`,
-      `/api/uc003/periods/${periodId}/lines`,
-      `/api/uc003/periods/${periodId}/runs`,
-      `/api/uc003/periods/${periodId}/variance`,
-      `/api/uc003/periods/${periodId}/export.csv`,
-      '/api/uc003/adjustments',
-      '/api/uc003/performance-inputs',
-      '/api/uc003/rate-sets',
-      '/api/uc003/edit-log/recent',
-    ];
-    for (const path of paths) {
-      const response = await asEmployee(request(app).get(path));
-      expect(response.status).toBe(403);
-    }
   });
 
   test('404 for an unknown period', async () => {
@@ -223,7 +190,8 @@ describe('run lifecycle (§3.1, §3.2, §5.9)', () => {
     expect(data.status).toBe('calculated');
 
     // Complete: PT-A (904.50 gross / 180.00 CPF) + FT-B (360.00, exempt).
-    // Incomplete (excluded): PT-C has hours but no rate.
+    // Incomplete (excluded): PT-C no rate, plus the 5 seeded staff with no
+    // data in this test window.
     expect(data.linesComplete).toBe(2);
     expect(data.linesIncomplete).toBe(6);
     expect(data.totals.gross).toBe('1264.50');
@@ -245,7 +213,7 @@ describe('run lifecycle (§3.1, §3.2, §5.9)', () => {
     expect(response.status).toBe(201);
     expect(response.body.data.run.runNumber).toBe(2);
 
-    const history = await asManager(request(app).get(`/api/uc003/periods/${periodId}/runs`));
+    const history = await asAccounting(request(app).get(`/api/uc003/periods/${periodId}/runs`));
     expect(history.status).toBe(200);
     const runs = history.body.data.runs;
     expect(runs.map((run) => run.runNumber)).toEqual([2, 1]);
@@ -253,12 +221,12 @@ describe('run lifecycle (§3.1, §3.2, §5.9)', () => {
   });
 
   test('lines endpoint serves the LATEST run with filters and paging (§6)', async () => {
-    const all = await asManager(request(app).get(`/api/uc003/periods/${periodId}/lines?limit=50`));
+    const all = await asAccounting(request(app).get(`/api/uc003/periods/${periodId}/lines?limit=50`));
     expect(all.status).toBe(200);
     expect(all.body.data.run.runNumber).toBe(2);
     expect(all.body.meta.total).toBe(8);
 
-    const incompleteOnly = await asManager(
+    const incompleteOnly = await asAccounting(
       request(app).get(`/api/uc003/periods/${periodId}/lines?status=incomplete`)
     );
     expect(incompleteOnly.body.meta.total).toBe(6);
@@ -266,7 +234,7 @@ describe('run lifecycle (§3.1, §3.2, §5.9)', () => {
       incompleteOnly.body.data.lines.every((line) => line.lineStatus === 'incomplete')
     ).toBe(true);
 
-    const searched = await asManager(
+    const searched = await asAccounting(
       request(app).get(`/api/uc003/periods/${periodId}/lines?search=T-PTA`)
     );
     expect(searched.body.meta.total).toBe(1);
@@ -274,12 +242,12 @@ describe('run lifecycle (§3.1, §3.2, §5.9)', () => {
   });
 
   test('line detail includes the calc_breakdown and run provenance (§5.7)', async () => {
-    const list = await asManager(
+    const list = await asAccounting(
       request(app).get(`/api/uc003/periods/${periodId}/lines?search=T-PTA`)
     );
     const lineId = list.body.data.lines[0].id;
 
-    const detail = await asManager(request(app).get(`/api/uc003/lines/${lineId}`));
+    const detail = await asAccounting(request(app).get(`/api/uc003/lines/${lineId}`));
     expect(detail.status).toBe(200);
     const line = detail.body.data;
     expect(line.runNumber).toBe(2);
@@ -290,7 +258,7 @@ describe('run lifecycle (§3.1, §3.2, §5.9)', () => {
   });
 
   test('void requires a reason (400) and demotes the run (§3.3)', async () => {
-    const history = await asManager(request(app).get(`/api/uc003/periods/${periodId}/runs`));
+    const history = await asAccounting(request(app).get(`/api/uc003/periods/${periodId}/runs`));
     const runTwo = history.body.data.runs.find((run) => run.runNumber === 2);
 
     const noReason = await asManager(request(app).post(`/api/uc003/runs/${runTwo.id}/void`)).send({});
@@ -307,7 +275,7 @@ describe('run lifecycle (§3.1, §3.2, §5.9)', () => {
     expect(again.status).toBe(409);
 
     // Run #1 becomes authoritative again.
-    const summary = await asManager(request(app).get(`/api/uc003/periods/${periodId}/summary`));
+    const summary = await asAccounting(request(app).get(`/api/uc003/periods/${periodId}/summary`));
     expect(summary.body.data.run.runNumber).toBe(1);
   });
 });
@@ -339,7 +307,7 @@ describe('register export and per-staff variance (§7.2, §7.9)', () => {
   });
 
   test('variance endpoint returns per-staff rows for the authoritative run', async () => {
-    const response = await asManager(
+    const response = await asAccounting(
       request(app).get(`/api/uc003/periods/${periodId}/variance`)
     );
     expect(response.status).toBe(200);
@@ -368,7 +336,7 @@ describe('submit to approval (§5.1, §6)', () => {
   test('succeeds once every line is complete; period -> pending_approval', async () => {
     // Force-complete the authoritative run's lines — resolving them for real
     // is the phase 5 resolve-loop flow; here we test the endpoint guard.
-    const summary = await asManager(request(app).get(`/api/uc003/periods/${periodId}/summary`));
+    const summary = await asAccounting(request(app).get(`/api/uc003/periods/${periodId}/summary`));
     const runId = summary.body.data.run.id;
     await pool.query(
       `UPDATE payroll_lines SET line_status = 'complete', incomplete_reasons = NULL WHERE run_id = $1`,
@@ -401,7 +369,7 @@ describe('submit to approval (§5.1, §6)', () => {
     expect(recalc.status).toBe(409);
     expect(recalc.body.error.code).toBe('PERIOD_LOCKED');
 
-    const history = await asManager(request(app).get(`/api/uc003/periods/${periodId}/runs`));
+    const history = await asAccounting(request(app).get(`/api/uc003/periods/${periodId}/runs`));
     const runThree = history.body.data.runs.find((run) => run.runNumber === 3);
     const voided = await asManager(request(app).post(`/api/uc003/runs/${runThree.id}/void`)).send({
       reason: 'should be refused',

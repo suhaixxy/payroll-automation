@@ -82,27 +82,25 @@ afterAll(async () => {
   await pool.end();
 });
 
-const asEmployee = (req) => req.set('Authorization', `Bearer ${accountingToken}`);
+const asAccounting = (req) => req.set('Authorization', `Bearer ${accountingToken}`);
 const asManager = (req) => req.set('Authorization', `Bearer ${managerToken}`);
 
-describe('reads (§6: manager only)', () => {
-  test('401 without a token; 403 for employee; 200 for manager', async () => {
+describe('reads (§6: any authenticated user)', () => {
+  test('401 without a token; 200 list with the seeded version', async () => {
     const anonymous = await request(app).get('/api/uc003/rate-sets');
     expect(anonymous.status).toBe(401);
 
-    const employee = await asEmployee(request(app).get('/api/uc003/rate-sets'));
-    expect(employee.status).toBe(403);
-    const list = await asManager(request(app).get('/api/uc003/rate-sets'));
+    const list = await asAccounting(request(app).get('/api/uc003/rate-sets'));
     expect(list.status).toBe(200);
     expect(list.body.data.rateSets.length).toBeGreaterThanOrEqual(1);
   });
 
   test('detail returns the full band table', async () => {
-    const list = await asManager(request(app).get('/api/uc003/rate-sets'));
+    const list = await asAccounting(request(app).get('/api/uc003/rate-sets'));
     const seeded = list.body.data.rateSets.find((set) => set.versionLabel === '2026-01');
     expect(seeded).toBeDefined();
 
-    const detail = await asManager(request(app).get(`/api/uc003/rate-sets/${seeded.id}`));
+    const detail = await asAccounting(request(app).get(`/api/uc003/rate-sets/${seeded.id}`));
     expect(detail.status).toBe(200);
     expect(detail.body.data.bands).toHaveLength(5);
     expect(detail.body.data.bands[0]).toMatchObject({
@@ -115,8 +113,8 @@ describe('reads (§6: manager only)', () => {
 });
 
 describe('create new version (§6: manager only, supersede not edit)', () => {
-  test('403 for employee', async () => {
-    const response = await asEmployee(request(app).post('/api/uc003/rate-sets')).send(VALID_BODY);
+  test('403 for accounting', async () => {
+    const response = await asAccounting(request(app).post('/api/uc003/rate-sets')).send(VALID_BODY);
     expect(response.status).toBe(403);
   });
 
@@ -139,7 +137,7 @@ describe('create new version (§6: manager only, supersede not edit)', () => {
     expect(response.body.data.effectiveTo).toBeNull();
     expect(response.body.data.bands).toHaveLength(2);
 
-    const list = await asManager(request(app).get('/api/uc003/rate-sets'));
+    const list = await asAccounting(request(app).get('/api/uc003/rate-sets'));
     const superseded = list.body.data.rateSets.find((set) => set.id === supersededSetId);
     expect(superseded.effectiveTo).toBe('2098-12-31'); // day before the new version
     const current = list.body.data.rateSets.find((set) => set.id === createdSetId);

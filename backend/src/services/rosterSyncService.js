@@ -9,13 +9,6 @@ const { fetchRosterRows } = require("../adapters/googleSheetsAdapter");
 const payPeriodService = require("./payPeriodService");
 const auditService = require("./auditService");
 const { calculateHours } = require("../utils/hoursCalculator");
-const AppError = require("../utils/AppError");
-
-function assertEditablePeriod(payPeriod) {
-  if (payPeriod.status !== "draft" || payPeriod.isLocked) {
-    throw new AppError(409, "PAY_PERIOD_NOT_EDITABLE", "This pay period is locked or no longer editable.");
-  }
-}
 
 // Match a roster row to an active staff record. Staff ID is checked first
 // because it's the reliable identifier; name is only a fallback for when
@@ -71,7 +64,6 @@ async function runRosterSync(payPeriodId, actor = "manual") {
       message: "The selected pay period does not exist",
     };
   }
-  assertEditablePeriod(payPeriod);
 
   const previousDraft = await getLastSyncResult(payPeriodId);
   let rosterRows;
@@ -324,11 +316,9 @@ async function getLastSyncResult(payPeriodId) {
 
 async function resolveException(timesheetRowId, resolution) {
   const rowResult = await pool.query(
-    `SELECT t.id, t.staff_id, t.match_status, t.is_frozen,
-            p.status AS pay_period_status, p.is_locked
-     FROM timesheet t
-     JOIN pay_period p ON p.id = t.pay_period_id
-     WHERE t.id = $1`,
+    `SELECT id, staff_id, match_status, is_frozen
+     FROM timesheet
+     WHERE id = $1`,
     [timesheetRowId]
   );
   const row = rowResult.rows[0];
@@ -340,7 +330,6 @@ async function resolveException(timesheetRowId, resolution) {
       message: "The timesheet row does not exist",
     };
   }
-  assertEditablePeriod({ status: row.pay_period_status, isLocked: row.is_locked });
   if (row.is_frozen) {
     return {
       success: false,
@@ -428,11 +417,9 @@ async function getResolvedExceptions(payPeriodId) {
 
 async function undoException(timesheetRowId) {
   const rowResult = await pool.query(
-    `SELECT t.id, t.match_status, t.is_frozen, t.clock_in, t.total_hours,
-            p.status AS pay_period_status, p.is_locked
-     FROM timesheet t
-     JOIN pay_period p ON p.id = t.pay_period_id
-     WHERE t.id = $1 AND t.resolved_manually = true`,
+    `SELECT id, match_status, is_frozen, clock_in, total_hours
+     FROM timesheet
+     WHERE id = $1 AND resolved_manually = true`,
     [timesheetRowId]
   );
   const row = rowResult.rows[0];
@@ -444,7 +431,6 @@ async function undoException(timesheetRowId) {
       message: "The manually resolved timesheet row does not exist",
     };
   }
-  assertEditablePeriod({ status: row.pay_period_status, isLocked: row.is_locked });
   if (row.is_frozen) {
     return {
       success: false,
@@ -492,11 +478,6 @@ async function undoException(timesheetRowId) {
 }
 
 async function resetPeriodResolutions(payPeriodId) {
-  const payPeriod = await payPeriodService.getPayPeriod(payPeriodId);
-  if (!payPeriod) {
-    return { success: false, error: "PAY_PERIOD_NOT_FOUND", message: "The selected pay period does not exist" };
-  }
-  assertEditablePeriod(payPeriod);
   await pool.query(
     "DELETE FROM timesheet WHERE pay_period_id = $1 AND resolved_manually = true",
     [payPeriodId]
