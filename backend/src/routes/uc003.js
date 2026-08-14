@@ -44,16 +44,10 @@ router.get('/lines/:lineId', requireAuth, uc003Controller.line);
 
 // Payroll line CRUD — manual overrides on the latest run (§5.10).
 // Manager only; blocked once the period is approved or paid.
-<<<<<<< Updated upstream
 router.post('/periods/:periodId/lines', requireAuth, requireRole('manager'), uc003Controller.createLine);
 router.patch('/lines/:lineId', requireAuth, requireRole('manager'), uc003Controller.updateLine);
 router.delete('/lines/:lineId', requireAuth, requireRole('manager'), uc003Controller.deleteLine);
 router.post('/lines/:lineId/resolve', requireAuth, requireRole('manager'), uc003Controller.resolveLine);
-=======
-router.post('/periods/:periodId/lines', uc003Controller.createLine);
-router.patch('/lines/:lineId', uc003Controller.updateLine);
-router.delete('/lines/:lineId', uc003Controller.deleteLine);
->>>>>>> Stashed changes
 
 // Edit history — recent edits across all entities, and per-entity trail.
 router.get('/edit-log/recent', requireAuth, uc003Controller.recentEdits);
