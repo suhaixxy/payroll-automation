@@ -724,6 +724,7 @@ function PayrollCalcPage() {
             onSort={handleSort}
             onShowBreakdown={(line) => setBreakdownLineId(line.id)}
             onResolve={user?.role === 'manager' ? handleResolve : undefined}
+            onResolveLine={user?.role === 'manager' ? handleResolveLine : undefined}
             onReviewTimesheets={user?.role === 'manager' ? () => navigate('/timesheets') : undefined}
             onReviewStaff={user?.role === 'manager' ? () => navigate('/staff') : undefined}
             canMutate={!periodLocked && user?.role === 'manager'}
