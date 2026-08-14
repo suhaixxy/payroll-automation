@@ -54,6 +54,10 @@ router.get('/lines/:lineId', authenticate, uc003Controller.line);
 
 // Payroll line CRUD — manual overrides on the latest run (§5.10).
 // Manager only; blocked once the period is approved or paid.
+router.post('/periods/:periodId/lines', requireAuth, requireRole('manager'), uc003Controller.createLine);
+router.patch('/lines/:lineId', requireAuth, requireRole('manager'), uc003Controller.updateLine);
+router.delete('/lines/:lineId', requireAuth, requireRole('manager'), uc003Controller.deleteLine);
+router.post('/lines/:lineId/resolve', requireAuth, requireRole('manager'), uc003Controller.resolveLine);
 router.post('/periods/:periodId/lines', authenticate, authorize('manager'), uc003Controller.createLine);
 router.patch('/lines/:lineId', authenticate, authorize('manager'), uc003Controller.updateLine);
 router.delete('/lines/:lineId', authenticate, authorize('manager'), uc003Controller.deleteLine);

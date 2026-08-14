@@ -599,3 +599,66 @@ button.MuiIconButton-root:hover:not(:disabled) { border-color: transparent; colo
   .payroll-calculation-page .field-row { align-items: stretch; flex-direction: column; }
   .payroll-calculation-page .stat-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
+
+/* Resolve dialog for incomplete payroll lines (§5.8). */
+.resolve-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.resolve-modal {
+  background: #fff;
+  border-radius: 12px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.12);
+  width: 100%;
+  max-width: 480px;
+  max-height: 90vh;
+  overflow-y: auto;
+}
+
+.resolve-modal-header {
+  padding: 20px 24px 0;
+}
+
+.resolve-modal-header h3 {
+  margin: 0;
+  font-size: 1.25rem;
+  font-weight: 600;
+}
+
+.resolve-modal-body {
+  padding: 16px 24px;
+}
+
+.resolve-reasons {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.resolve-reason-item {
+  padding: 8px 12px;
+  background: #fff8e1;
+  border-radius: 6px;
+  border-left: 3px solid #f59e0b;
+}
+
+.resolve-reason-message {
+  margin: 4px 0 0;
+  font-size: 0.875rem;
+  color: #666;
+}
+
+.resolve-modal-footer {
+  padding: 16px 24px;
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+  border-top: 1px solid #eee;
+}
