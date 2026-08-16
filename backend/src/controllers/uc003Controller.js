@@ -279,6 +279,23 @@ async function deleteLine(req, res, next) {
   }
 }
 
+async function resolveLine(req, res, next) {
+  try {
+    if (!checkUuid(res, req.params.lineId, 'LINE_NOT_FOUND', 'payroll line')) return;
+    const note = typeof req.body?.note === 'string' ? req.body.note.trim() : '';
+    if (!note) {
+      return res.fail(400, 'VALIDATION_ERROR', 'Resolving an incomplete line requires a resolution note.', [
+        { field: 'note', message: 'required' },
+      ]);
+    }
+    const result = await runService.resolveLine(req.params.lineId, note, actorOf(req));
+    if (result.error) return failFromServiceError(res, result);
+    res.ok(result.data);
+  } catch (err) {
+    next(err);
+  }
+}
+
 // ── Edit history ───────────────────────────────────────────────────────
 
 const editLogService = require('../services/editLogService');
@@ -324,6 +341,7 @@ module.exports = {
   createLine,
   updateLine,
   deleteLine,
+  resolveLine,
   editHistory,
   recentEdits,
 };

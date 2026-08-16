@@ -927,6 +927,52 @@ async function deleteLine(lineId, actor) {
   return { data: { id: lineId } };
 }
 
+// §5.8: allow a manager to resolve an incomplete line directly by adding a
+// resolution note. This marks the line as complete so the period can be
+// submitted without changing the underlying source data (timesheets, staff
+// records, pay rates). The note is kept for audit purposes.
+async function resolveLine(lineId, note, actor) {
+  const [existing] = await sequelize.query(
+    `SELECT pl.id, pl.line_status, pl.staff_id, r.period_id, p.status AS period_status,
+            s.external_ref AS "staffRef", s.full_name AS "staffName"
+     FROM payroll_lines pl
+     JOIN calculation_runs r ON r.id = pl.run_id
+     JOIN pay_period p ON p.id = r.period_id
+     LEFT JOIN staff s ON s.id = pl.staff_id
+     WHERE pl.id = :lineId`,
+    { replacements: { lineId }, type: QueryTypes.SELECT }
+  );
+  if (!existing) return { error: 'LINE_NOT_FOUND' };
+  if (uc003Locked.includes(existing.period_status)) {
+    return { error: 'PERIOD_LOCKED', currentStatus: existing.period_status };
+  }
+  if (existing.line_status === 'complete') {
+    return { error: 'LINE_ALREADY_COMPLETE', message: 'This line is already complete.' };
+  }
+
+  await sequelize.query(
+    `UPDATE payroll_lines
+     SET line_status = 'complete',
+         resolved_manually = true,
+         resolution_note = :note,
+         updated_at = now()
+     WHERE id = :lineId`,
+    { replacements: { lineId, note } }
+  );
+
+  const staffLabel = existing.staffRef
+    ? `${existing.staffRef} — ${existing.staffName}`
+    : 'Unmatched staff';
+
+  await editLogService.recordEdit('payroll_line', lineId, 'updated', actor, {
+    staff: staffLabel,
+    resolutionNote: note,
+    statusChange: 'incomplete → complete (resolved manually)',
+  });
+
+  return { data: { id: lineId, resolved: true } };
+}
+
 module.exports = {
   executeRun,
   submitForApproval,
@@ -942,5 +988,6 @@ module.exports = {
   createLine,
   updateLine,
   deleteLine,
+  resolveLine,
   VARIANCE_THRESHOLD,
 };
